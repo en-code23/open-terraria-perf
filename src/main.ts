@@ -1,5 +1,6 @@
 // 入口：加载素材/字体/文案 → VUI 主菜单 → 生成/加载世界 → 进入游戏
 // 流程编排见 mainFlow.ts；本文件只做装配 + 游戏内键盘/开发者工具接线。
+import { installTerrariaSkin } from './ui/TerrariaSkin';
 import './workers/procShim';   // ★首导入兜底(见 procShim.ts;worker 侧同款已挂 worldGen.worker)
 import { Game } from './core/Game';
 import { showSplash } from './ui/Splash';
@@ -1054,6 +1055,7 @@ kvHas('sandboxworld.quicksave').catch((e) => {
   //   缓存等待 的全部无图窗口,消灭"以为故障黑屏"。z=10000:门(10001)之下、
   //   过渡页(30)之上
   let bootVeil: HTMLElement | null = null;
+  installTerrariaSkin();   // Fork: Terraria-Schrift + Übersetzung hart kodierter chinesischer Texte
   if (!bypassBoot) {
     const veil = document.createElement('div');
     veil.id = 'sw-boot-prime';
@@ -1074,7 +1076,8 @@ kvHas('sandboxworld.quicksave').catch((e) => {
     const sfImg = new Image();
     let sfOk = false;
     sfImg.onload = () => { sfOk = true; };
-    sfImg.src = 'sprites/vanilla-ui/UI_Sunflower_Loading.png';   // vanilla-ui 散件常驻,首访即可得
+    // Fork: Start wie im Original = schwarz, dann Splash — keine Sonnenblume
+    if (false as boolean) sfImg.src = 'sprites/vanilla-ui/UI_Sunflower_Loading.png';
     const sfT0 = performance.now();
     const sfStep = () => {
       if (!veil.isConnected) return;   // 撤除即停

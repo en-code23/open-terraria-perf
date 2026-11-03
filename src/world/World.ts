@@ -515,7 +515,7 @@ export class World {
     return this.exploredRevealSnapshot !== null;
   }
 
-  constructor(w: number, h: number, seed: number, name = '新世界', skipStore = false) {
+  constructor(w: number, h: number, seed: number, name = 'World', skipStore = false) {
     // skipStore(读档 fromPacket 专用):调用方立即以转移 buffer 版 TileStore+explored
     // 注入——跳过默认分配免 15B/tile 丢弃式浪费(75-173MB);其余字段照常初始化
     if (!skipStore) {

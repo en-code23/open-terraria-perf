@@ -27,6 +27,43 @@ import { openAssetDiagPanel } from './AssetDownloadUI';
 import { achievementsPanelOpen } from './AchievementsUI';
 import { openModsPanel } from '../mods/modsPanel';
 import type { GenScreenSeedFlags } from '../vui/states/UIWorldLoadState';
+import { loadTerrariaFont, type TerrariaFont } from './TerrariaFont';
+import { UISfx } from '../vui/UISfx';
+
+// ───────── Fork: Terraria-Menü-Optik (Death_Text/Mouse_Text aus der lokalen Steam-Installation) ─────────
+/** Menüpunkt-Farben, gemessen am Original-Screenshot (Text ≈ 150 grau, Rand fast schwarz) */
+const MENU_IDLE = 'rgb(150,150,150)';
+const MENU_HOT = 'rgb(255,230,40)';
+const MENU_TEXT = 'rgb(220,220,220)';
+/** Fork-Hinweise (hart kodiert: die l10n-Quellen liegen außerhalb des Repos) */
+const FORK_TEXT = {
+  de: {
+    credits: [
+      'Terraria © Re-Logic. Alle Rechte an Spiel, Grafik, Musik und Sound liegen bei Re-Logic.',
+      'Dies ist NICHT das Original und kein offizielles Re-Logic-Produkt.',
+      'Open-Terraria: Web-Nachbau von Vinlic, mit KI erstellt (GLM-5.3, Claude Code).',
+      'Diese Version: Performance- und Menü-Überarbeitung, mit KI erstellt (Claude).',
+      'Nur für private Lern- und Testzwecke. Bitte kauf das Original auf Steam.',
+    ],
+    footer: 'Kein Original · mit KI erstellt · Terraria © Re-Logic',
+    buy: 'Original auf Steam kaufen',
+  },
+  en: {
+    credits: [
+      'Terraria © Re-Logic. All rights to the game, art, music and sound belong to Re-Logic.',
+      'This is NOT the original game and not an official Re-Logic product.',
+      'Open-Terraria: web remake by Vinlic, made with AI (GLM-5.3, Claude Code).',
+      'This build: performance and menu rework, made with AI (Claude).',
+      'For private learning and testing only. Please buy the original on Steam.',
+    ],
+    footer: 'Not the original · made with AI · Terraria © Re-Logic',
+    buy: 'Buy the original on Steam',
+  },
+};
+function forkText() {
+  return (Lang.activeCultureName ?? '').startsWith('de') ? FORK_TEXT.de : FORK_TEXT.en;
+}
+const STEAM_URL = 'https://store.steampowered.com/app/105600/Terraria';
 
 /** Sun.png 114×114 / Moon_N.png 50×400（8 相位帧，帧宽 50）——SkyRenderer.ts:27-28 */
 const SUN_SIZE = 114;
@@ -126,7 +163,7 @@ const CSS = `
   user-select: none;
 }
 .sw-title-logo {
-  margin-top: 13vh; width: min(486px, 60vw);
+  margin-top: 2.6vh; width: min(37.5vw, 66vh);
   aspect-ratio: 486 / 142;
   animation: sw-logo-swing 5.2s ease-in-out infinite;
   pointer-events: none; position: relative;
@@ -139,9 +176,10 @@ const CSS = `
   50% { transform: rotate(2.2deg) scale(1.12); }
 }
 .sw-title-btns {
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  margin-top: 7vh;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  margin-top: 3vh;
 }
+.sw-title-btns[hidden] { display: none; }
 .sw-title-btn {
   background: none; border: none; cursor: pointer; pointer-events: auto;
   font-family: inherit; font-size: 24px; letter-spacing: 3px;
@@ -150,6 +188,18 @@ const CSS = `
   transition: color .12s, transform .12s;
 }
 .sw-title-btn:hover { color: #ffd76e; transform: scale(1.06); }
+/* Bitmap-Schrift aktiv: Zeilenraster wie im Original (≈5,8 % Bildhöhe), Hover = gelb + wachsen
+   (menuItemScale 0.8→0.9 ≈ ×1.12, hier als CSS-Übergang) */
+.sw-bmp .sw-title-btn, .sw-bmp .sw-title-line { height: 5.8vh; padding: 0 28px; letter-spacing: 0;
+  display: flex; align-items: center; justify-content: center; text-shadow: none; }
+.sw-bmp .sw-title-btn:hover { transform: none; }
+.sw-bmp .sw-title-btn > .lbl { display: block; transform: scale(.89); transition: transform .16s ease-out; }
+.sw-bmp .sw-title-btn.hot > .lbl { transform: scale(1); }
+.sw-bmp .lbl canvas { display: block; }
+.sw-title-credits .sw-title-line { height: 4.2vh; pointer-events: none; }
+.sw-title-credits .sw-title-btn[data-act=buy] { margin-top: 2vh; }
+.sw-title-line { color: #ddd; font-size: 15px; padding: 4px 20px; text-align: center;
+  text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000; }
 .sw-title-version {
   position: fixed; left: 10px; bottom: 8px; font-size: 13px; color: #fff;
   text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;
@@ -160,6 +210,7 @@ const CSS = `
    不绘制不可点)。visibility:hidden = 同时移出命中测试(仅藏会吃点击的按钮列,
    logo/日·月抓取层不受影响);由 rAF 步进按 achievementsPanelOpen() 摘挂。 */
 .sw-title-menu.sw-title-suppressed .sw-title-btns { visibility: hidden; }
+.sw-title-menu.sw-title-suppressed-set .sw-title-btns { visibility: hidden; }
 /* 复刻版本基准副行(v0.1.0 下方,用户要求 2026-08-28) */
 .sw-title-baseline { opacity: .85; }
 /* 右下署名（GLM-5.3/GLM-5.3-Flash 协作声明）用【内联样式】——注入样式表的
@@ -311,20 +362,27 @@ export class TitleMenu {
         <img class="logo-day" src="${daySrc}" alt="logo">
         <img class="logo-night" src="${nightSrc}" alt="">
       </div>
-      <div class="sw-title-btns">
+      <div class="sw-title-btns" data-group="main">
         <div class="sw-title-btn" data-act="sp">${Lang.text('LegacyMenu.12')}</div>
         <div class="sw-title-btn" data-act="mp">${Lang.text('LegacyMenu.13')}</div>
         ${this.flow.onAchievements ? `<div class="sw-title-btn" data-act="ach">${Lang.text('LegacyMenu.131')}</div>` : ''}
-        <div class="sw-title-btn" data-act="mods">${Lang.text('Mods.SandboxWorld.Menu.Mods')}</div>
-        ${this.flow.onAssetPacks ? `<div class="sw-title-btn" data-act="packs">${Lang.text('Mods.SandboxWorld.Menu.AssetPacks')}</div>` : ''}
+        <div class="sw-title-btn" data-act="ws">${Lang.text('UI.Workshop')}</div>
         <div class="sw-title-btn" data-act="set">${Lang.text('LegacyMenu.14')}</div>
-        <div class="sw-title-btn" data-act="buy">${Lang.text('Mods.SandboxWorld.Menu.BuyTerraria')}</div>
+        <div class="sw-title-btn" data-act="cred">${Lang.text('UI.Credits')}</div>
         <!-- ★2026-10-04 用户令:主菜单摘除「复刻笔记」入口按钮(仅去按钮,功能链
              保留:on('replog') 外链打开 + :498 l10n 刷新原样在位,恢复=回贴本行
              <div class="sw-title-btn" data-act="replog">${Lang.text('Mods.SandboxWorld.Menu.ReplicaNotes')}</div> ) -->
-        ${(window as unknown as { sandboxDesktop?: { isShell?: boolean } }).sandboxDesktop?.isShell
-          ? `<div class="sw-title-btn" data-act="quit">${Lang.text('LegacyMenu.15')}</div>`
-          : ''}
+        <div class="sw-title-btn" data-act="quit">${Lang.text('LegacyMenu.15')}</div>
+      </div>
+      <div class="sw-title-btns" data-group="ws" hidden>
+        <div class="sw-title-btn" data-act="mods">${Lang.text('Mods.SandboxWorld.Menu.Mods')}</div>
+        ${this.flow.onAssetPacks ? `<div class="sw-title-btn" data-act="packs">${Lang.text('UI.ResourcePacks')}</div>` : ''}
+        <div class="sw-title-btn" data-act="back">${Lang.text('UI.Back')}</div>
+      </div>
+      <div class="sw-title-btns sw-title-credits" data-group="cred" hidden>
+        ${forkText().credits.map((_, i) => `<div class="sw-title-line" data-line="${i}"></div>`).join('')}
+        <div class="sw-title-btn" data-act="buy">${forkText().buy}</div>
+        <div class="sw-title-btn" data-act="back">${Lang.text('UI.Back')}</div>
       </div>
     `;
     // 角标文字层（版本号+署名）：body 级独立层 z35——splash(z30) 之上、下载徽标
@@ -341,6 +399,7 @@ export class TitleMenu {
       </style>
       <div class="sw-title-version"><div>SandboxWorld v${APP_VERSION} ${BUILD_STAMP}</div><div class="sw-title-baseline">${Lang.text('Mods.SandboxWorld.Title.RemakeBaseline')}</div></div>
       <div data-credit style="position:fixed;right:10px;bottom:8px;font-size:13px;color:#fff;text-align:right;line-height:1.6;pointer-events:none;text-shadow:1px 0 0 #000,-1px 0 0 #000,0 1px 0 #000,0 -1px 0 #000;"></div>
+      <a data-buy href="${STEAM_URL}" target="_blank" rel="noopener" style="position:fixed;right:10px;bottom:52px;font-size:13px;color:#ffe628;pointer-events:auto;text-decoration:none;text-shadow:1px 0 0 #000,-1px 0 0 #000,0 1px 0 #000,0 -1px 0 #000;"></a>
     `;
     document.body.appendChild(this.chrome);
     this.logoDay = this.root.querySelector('.logo-day') as unknown as HTMLImageElement;
@@ -390,15 +449,24 @@ export class TitleMenu {
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
     const on = (act: string, fn: () => void) => {
-      this.root.querySelector(`[data-act=${act}]`)?.addEventListener('click', fn);
+      this.root.querySelectorAll(`[data-act=${act}]`).forEach((el) => el.addEventListener('click', fn));
     };
+    // Original-Menügefühl: Hover = Menu_Tick + gelb/wachsen, Klick = Menu_Open
+    this.root.querySelectorAll<HTMLElement>('.sw-title-btn').forEach((el) => {
+      el.addEventListener('mouseenter', () => { el.classList.add('hot'); UISfx.hover(); this.paintEl(el); });
+      el.addEventListener('mouseleave', () => { el.classList.remove('hot'); this.paintEl(el); });
+      el.addEventListener('click', () => UISfx.menuOpen());
+    });
+    on('ws', () => this.showGroup('ws'));
+    on('cred', () => this.showGroup('cred'));
+    on('back', () => this.showGroup('main'));
     on('sp', () => flow.onSinglePlayer());
     on('mp', () => flow.onMultiplayer());
     on('ach', () => flow.onAchievements?.());   // ★SW-FX18 成就页（menu[131] 同位）
     on('mods', () => openModsPanel());          // ★mod loader(2026-10-04):mods 管理面板
     on('packs', () => flow.onAssetPacks?.());   // ★原版资源包页(2026-10-12 退役 RemotionPanel 后改挂)
     on('set', () => flow.onSettings());
-    on('buy', () => window.open('https://store.steampowered.com/app/105600/Terraria', '_blank', 'noopener'));
+    on('buy', () => window.open(STEAM_URL, '_blank', 'noopener'));
     on('replog', () => window.open('https://github.com/Vinlic/terraria-replica-build-notes', '_blank', 'noopener'));
     on('quit', () => flow.onQuit());
     parent.appendChild(this.root);
@@ -409,6 +477,98 @@ export class TitleMenu {
     this.startLogoFade();
     this.unsubLang = Lang.onChange(() => this.renderTexts());
     this.renderTexts(); // 初始填充（署名 div 是空容器，仅靠 onChange 永不落字）
+    window.addEventListener('resize', this.onResize);
+    // Terraria-Schrift (lokal extrahiert); fehlt sie, bleibt die Pixelschrift
+    void Promise.all([loadTerrariaFont('Death_Text'), loadTerrariaFont('Mouse_Text')]).then(([big, small]) => {
+      if (!this.root.isConnected || !big) return;
+      this.font = big;
+      this.smallFont = small;
+      this.root.classList.add('sw-bmp');
+      this.paintAll();
+    });
+  }
+
+  // ---- Fork: Bitmap-Schrift-Malerei ----
+  private font: TerrariaFont | null = null;
+  private smallFont: TerrariaFont | null = null;
+  private resizeRaf = 0;
+  private onResize = (): void => {
+    cancelAnimationFrame(this.resizeRaf);
+    this.resizeRaf = requestAnimationFrame(() => this.paintAll());
+  };
+
+  /** Menüschrift-Skalierung: im Original ≈ 3,6 % Bildhöhe Versalhöhe → 0.9 bei 900 px */
+  private menuScale(): number {
+    return Math.max(0.45, Math.min(1.4, (window.innerHeight / 900) * 0.9));
+  }
+
+  private showGroup(name: 'main' | 'ws' | 'cred'): void {
+    this.root.querySelectorAll<HTMLElement>('.sw-title-btns[data-group]').forEach((g) => {
+      g.hidden = g.dataset.group !== name;
+    });
+    this.root.querySelectorAll('.sw-title-btn.hot').forEach((el) => el.classList.remove('hot'));
+    this.paintAll();
+  }
+
+  private paintEl(el: HTMLElement): void {
+    const label = el.dataset.label ?? el.textContent ?? '';
+    el.dataset.label = label;
+    if (!this.font) { el.textContent = label; return; }
+    const isLine = el.classList.contains('sw-title-line');
+    const s = this.menuScale() * (isLine ? 0.5 : 1);
+    const cv = this.font.render(label, {
+      scale: s,
+      color: isLine ? MENU_TEXT : el.classList.contains('hot') ? MENU_HOT : MENU_IDLE,
+      border: Math.max(1, Math.round(2 * s)),
+    });
+    cv.setAttribute('aria-hidden', 'true');
+    el.setAttribute('aria-label', label);
+    // persistenter Wrapper, damit der Hover-Zoom per CSS-Transition animiert
+    let lbl = el.firstElementChild as HTMLElement | null;
+    if (!lbl || !lbl.classList.contains('lbl') || el.childNodes.length !== 1) {
+      lbl = document.createElement('span');
+      lbl.className = 'lbl';
+      el.replaceChildren(lbl);
+    }
+    lbl.replaceChildren(cv);
+  }
+
+  private paintSmall(el: HTMLElement, lines: string[], color = '#fff'): void {
+    if (!this.smallFont) return;
+    const s = Math.max(0.55, Math.min(1.2, window.innerHeight / 1000));
+    el.setAttribute('aria-label', lines.join(' '));
+    el.style.textShadow = 'none';
+    el.replaceChildren(...lines.map((t) => {
+      const cv = this.smallFont!.render(t, { scale: s, color, border: Math.max(1, Math.round(1.5 * s)) });
+      cv.style.display = 'block';
+      cv.style.marginLeft = 'auto';
+      return cv;
+    }));
+  }
+
+  private paintAll(): void {
+    this.root.querySelectorAll<HTMLElement>('.sw-title-btn, .sw-title-line').forEach((el) => {
+      if (el.offsetParent !== null || !this.font) this.paintEl(el);
+    });
+    if (!this.smallFont) return;
+    const t = (k: string, ...a: (string | number)[]) => Lang.text(k, ...a);
+    const ver = this.chrome.querySelector<HTMLElement>('.sw-title-version');
+    if (ver) {
+      this.paintSmall(ver, [`SandboxWorld v${APP_VERSION} ${BUILD_STAMP}`, t('Mods.SandboxWorld.Title.RemakeBaseline')]);
+      ver.querySelectorAll('canvas').forEach((c) => { c.style.marginLeft = '0'; });
+    }
+    const credit = this.chrome.querySelector<HTMLElement>('[data-credit]');
+    if (credit) {
+      this.paintSmall(credit, [
+        t('Mods.SandboxWorld.Credits.Line1', 'GLM-5.3', 'GLM-5.3-Flash'),
+        t('Mods.SandboxWorld.Credits.Line2'),
+        forkText().footer,
+      ]);
+    }
+    const buy = this.chrome.querySelector<HTMLElement>('[data-buy]');
+    if (buy) this.paintSmall(buy, [forkText().buy], MENU_HOT);
+    const r = credit?.getBoundingClientRect();
+    if (buy && r && r.height > 0) buy.style.bottom = `${Math.round(window.innerHeight - r.top + 2)}px`;
   }
 
   // ---- 日/月抓取（GOING_OLDSCHOOL，Main.cs:62420-62453 1:1）----
@@ -498,14 +658,26 @@ export class TitleMenu {
   private renderTexts() {
     const t = (k: string, ...args: (string | number)[]) => Lang.text(k, ...args);
     const set = (act: string, text: string) => {
-      const el = this.root.querySelector(`[data-act=${act}]`);
-      if (el) el.textContent = text;
+      this.root.querySelectorAll<HTMLElement>(`[data-act=${act}]`).forEach((el) => {
+        el.dataset.label = text;
+        el.textContent = text;
+      });
     };
     set('sp', t('LegacyMenu.12'));
     set('mp', t('LegacyMenu.13'));
     set('ach', t('LegacyMenu.131'));   // ★SW-FX18 成就页（menu[131] 同位）
     set('set', t('LegacyMenu.14'));
-    set('buy', t('Mods.SandboxWorld.Menu.BuyTerraria'));
+    set('buy', forkText().buy);
+    set('ws', t('UI.Workshop'));
+    set('cred', t('UI.Credits'));
+    set('mods', t('Mods.SandboxWorld.Menu.Mods'));
+    set('packs', t('UI.ResourcePacks'));
+    set('back', t('UI.Back'));
+    this.root.querySelectorAll<HTMLElement>('.sw-title-line').forEach((el) => {
+      const line = forkText().credits[Number(el.dataset.line)] ?? '';
+      el.dataset.label = line;
+      el.textContent = line;
+    });
     set('replog', t('Mods.SandboxWorld.Menu.ReplicaNotes'));
     set('quit', t('LegacyMenu.15'));
     // 右下署名两行（多语化：{0}/{1} = 加粗名，b 样式含像素字体复制法加粗+左右 margin）
@@ -517,6 +689,10 @@ export class TitleMenu {
     // 左下复刻版本基准副行（随语言切换刷新）
     const baseline = this.chrome.querySelector('.sw-title-baseline');
     if (baseline) baseline.textContent = t('Mods.SandboxWorld.Title.RemakeBaseline');
+    const buy = this.chrome.querySelector('[data-buy]');
+    if (buy) buy.textContent = forkText().buy;
+    if (credit) credit.innerHTML += `<br>${forkText().footer}`;
+    if (this.font) this.paintAll();
   }
 
   /** LogoA/LogoB 昼夜交叉淡化（1456 Main.cs:47773-47799 一比一）：
@@ -557,6 +733,12 @@ export class TitleMenu {
         this.modY = decayCelestialModY(this.modY);
       }
       this.syncCelestial();
+      // Fork: Menüpunkte ausblenden, solange das Einstellungs-Panel offen ist
+      // (sonst ragt der oberste Punkt über dem Panel heraus)
+      const setOpen = !!document.querySelector('.sw-set-panel');
+      if (setOpen !== this.root.classList.contains('sw-title-suppressed-set')) {
+        this.root.classList.toggle('sw-title-suppressed-set', setOpen);
+      }
       this.rafId = requestAnimationFrame(step);
     };
     this.rafId = requestAnimationFrame(step);
@@ -570,6 +752,8 @@ export class TitleMenu {
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('sw-ach-toggle', this.onAchToggle);
+    window.removeEventListener('resize', this.onResize);
+    cancelAnimationFrame(this.resizeRaf);
     this.unsubLang?.();
     this.chrome.remove();
     this.root.remove();

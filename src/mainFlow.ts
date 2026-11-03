@@ -62,6 +62,9 @@ const QUICK_SAVE_KEY = 'sandboxworld.quicksave';
 /** 脚本兼容垫片：旧 puppeteer 脚本点 select+button 建世界（M7 清理） */
 let legacyShim: HTMLElement | null = null;
 
+/** Fork: kein Willkommens-Toast beim Betreten einer Welt (wie im Original) */
+const FORK_NO_WELCOME_TOAST = true;
+
 export interface FlowHandle {
   showTitle(bgPaused?: boolean): void;
   /** 揭幕解冻菜单背景（main.ts splash.revealBehind 时调——配合 showTitle(true)） */
@@ -640,7 +643,8 @@ function makeGame(): Game {
           // 即刻陈旧。四段标签全部经 keybindHintLabel 现读 bindsOf（重绑跟随）；
           // 暂停段=Escape 仍绑在 Inventory 时才给键名（原版暂停浮层无独立 trigger,
           // 本仓 Esc 链 face 派生自该绑定），否则显示"未绑定"。
-          ui.toast(Lang.text('Mods.SandboxWorld.Toast.Welcome', g.world.name,
+          // Fork: Willkommens-Toast entfällt (gibt es im Original nicht)
+          if (!FORK_NO_WELCOME_TOAST) ui.toast(Lang.text('Mods.SandboxWorld.Toast.Welcome', g.world.name,
             `${keybindHintLabel('Left')}/${keybindHintLabel('Right')}`,
             keybindHintLabel('Jump'),
             keybindHintLabel('Inventory'),

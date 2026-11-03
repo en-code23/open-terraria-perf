@@ -353,6 +353,9 @@ export class SettingsPanel {
     const hint = document.createElement('div');
     hint.className = 'sw-set-hint';
     hint.textContent = Lang.text('Mods.SandboxWorld.Settings.FontHint');
+    // Fork: Hinweis "non-Chinese languages fall back to system fonts" entfällt
+    // (Terraria-Schrift wird lokal aus der Steam-Installation geladen)
+    hint.hidden = true;
     wrap.append(hint);
     return wrap;
   }

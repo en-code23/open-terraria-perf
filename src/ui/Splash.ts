@@ -123,7 +123,16 @@ export function showSplash(opts: {
   swTrace(`过渡图时序启动 set=${set} quick=${quick}`);
   void (async () => {
     const t0w = performance.now();
-    if (typeof caches !== 'undefined') {
+    // Fork-Fix: lokal (npm run dev, kein Service-Worker-Zip) liegen die Bilder direkt
+    // unter ihrer URL, landen aber nie im CacheStorage → die Schleife unten wartete
+    // ewig und der Splash blieb schwarz (nur Sonnenblume). Direkt erreichbar → sofort mounten.
+    const directOk = async (): Promise<boolean> => {
+      try {
+        const rs = await Promise.all(splashUrls.map((u) => fetch(u, { method: 'HEAD' })));
+        return rs.every((r) => r.ok && (r.headers.get('content-type') ?? '').startsWith('image/'));
+      } catch { return false; }
+    };
+    if (typeof caches !== 'undefined' && !(await directOk())) {
       let lastLog = -1;
       for (;;) {
         let hit = -1;
@@ -215,7 +224,8 @@ export function showSplash(opts: {
     // LoadingSunflower 显隐（Main.cs:53417-53422 1:1）：时序走完且未加载完 →
     // Color.White 全亮（num==1 分支）；时序内但已超 10s（num2>num）→ 随 b 淡显；
     // 前 10s 不画。加载完 → 隐（收场在即）
-    const flowerVisible = !loadingDone && (timelineOver || (performance.now() - t0) > 10000);
+    // Fork: keine Sonnenblume — der Original-Splash bleibt stehen, bis alles geladen ist
+    const flowerVisible = false && !loadingDone && (timelineOver || (performance.now() - t0) > 10000);
     if (flowerVisible) ensureFlowerSrc();
     flower.style.opacity = loadingDone ? '0'
       : timelineOver ? '1'
@@ -233,14 +243,14 @@ export function showSplash(opts: {
     const a = splashAlphaAt(t, quick);
     if (a < 0) {
       if (!loadingDone) {
-        if (!holding) { holding = true; holdB = Math.max(b, 160); swTrace(`时序尽→HOLD冻结 holdB=${holdB} bg=${back.style.backgroundImage ? '已挂' : '未挂'} loadingDone=${loadingDone}`); }
+        if (!holding) { holding = true; holdB = 255; swTrace(`时序尽→HOLD冻结 holdB=${holdB} bg=${back.style.backgroundImage ? '已挂' : '未挂'} loadingDone=${loadingDone}`); }
         b = holdB;
         timelineOver = true;
       } else { remove(); return; }
     }
     else if (!loadingDone && t >= n5 - n6) {
       // 渐隐段但下载未完:同样冻结亮度(不随曲线衰减、不透出菜单)
-      if (!holding) { holding = true; holdB = Math.max(Math.round(a), 160); swTrace(`渐隐段未完→HOLD冻结 holdB=${holdB} bg=${back.style.backgroundImage ? '已挂' : '未挂'} loadingDone=${loadingDone}`); }
+      if (!holding) { holding = true; holdB = 255; swTrace(`渐隐段未完→HOLD冻结 holdB=${holdB} bg=${back.style.backgroundImage ? '已挂' : '未挂'} loadingDone=${loadingDone}`); }
       b = holdB;
     }
     else b = Math.round(a);

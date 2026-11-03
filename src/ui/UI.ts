@@ -1071,6 +1071,9 @@ export function pvpHoverFrame(hostile: boolean): readonly [number, number] {
 /** 队伍切换冷却（teamCooldownLen=300t × 1000/60ms，:1026；冷却期无悬停提示/不可点） */
 export const PVP_COOLDOWN_MS = 5000;
 
+/** Fork: Anleitungsknopf ("?") ausblenden — wie im Original */
+const FORK_NO_MANUAL_BTN = true;
+
 export class UI {
   devMode = false; // 开发者模式：进世界时全道具入包 + 出生点展示区
   root: HTMLElement;
@@ -1736,7 +1739,8 @@ export class UI {
   }
 
   private buildManualBtn(game: Game) {
-    if (options.data.manualHidden) return;
+    // Fork: kein "?"-Anleitungsknopf neben der Hotbar (gibt es im Original nicht)
+    if (FORK_NO_MANUAL_BTN || options.data.manualHidden) return;
     const wrap = el('div', 'sw-manual-wrap');
     const btn = el('button', 'sw-manual-btn', '?');
     btn.title = Lang.text('Mods.SandboxWorld.UI.Manual');
@@ -8863,6 +8867,23 @@ export class UI {
     const ammoLbl = txt(Lang.text('LegacyInterface.27'));
     ammoLbl.style.fontSize = '13px';
     pos(ammoLbl, () => ({ x: AMMO_LABEL_XY.x, y: AMMO_LABEL_XY.y }));
+    // Fork-Fix: lange Übersetzungen (de "Münzen"/"Munition") überlappten sich —
+    // die Labels stehen nur 36 px auseinander. Breite auf die Spalte stauchen.
+    const fitLbl = (l: HTMLElement, maxW: number): void => {
+      l.style.transformOrigin = '0 0';
+      l.style.whiteSpace = 'nowrap';
+      const fit = (): void => {
+        l.style.transform = '';
+        const w = l.scrollWidth;
+        if (w > maxW) l.style.transform = `scaleX(${(maxW / w).toFixed(3)})`;
+      };
+      // Panel ist beim Aufbau display:none (Breite 0) → messen, sobald es sichtbar wird.
+      // transform ändert die Layout-Box nicht, daher keine Beobachter-Schleife.
+      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fit).observe(l);
+      void document.fonts?.ready.then(fit);
+    };
+    fitLbl(coinLbl, AMMO_LABEL_XY.x - COIN_LABEL_XY.x - 2);
+    fitLbl(ammoLbl, AMMO_LABEL_XY.x - COIN_LABEL_XY.x + 4);
     for (let k = 0; k < 4; k++) {
       const cs = this.vinvMakeSlot('inv', COIN_START + k, COIN_AMMO_SCALE);
       root.appendChild(cs);

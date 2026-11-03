@@ -303,7 +303,7 @@ export async function generateWorld(cfg: GenConfig, onProgress?: OnGenProgress):
   const effSize = cfg.size !== undefined ? cfg.size : copied?.size;
   const effEvil = cfg.evil !== undefined && cfg.evil !== -1 ? cfg.evil : (copied ? copied.evil : cfg.evil);
   const { width, height } = effSize !== undefined ? SIZE_DIMS[effSize] : cfg;
-  const world = new World(width, height, seed, cfg.name ?? '新世界');
+  const world = new World(width, height, seed, cfg.name ?? 'World');
   // ★IIIII221：引擎 CheckSign 状态复位 + 签字牌存档钩（graveyard #76 幽灵掷主刀；
   //   vanilla Sign.KillSign 的 JS 存档面=world.signs 同步移除）
   engineResetSignState(world.signs);
