@@ -1,5 +1,11 @@
 # Open Terraria
 
+> [!IMPORTANT]
+> **Verbesserte Version von [SandboxWorldOnline/Open-Terraria](https://github.com/SandboxWorldOnline/Open-Terraria)** (Branch `perf`, privat, nur für den persönlichen Gebrauch).
+> - Behoben: Freeze ca. 2 s nach Weltbeitritt (Endlosschleife Minecart-Schienen ↔ Stützprüfung; Stack-Overflow bei langen Einsturzketten).
+> - Weltgenerierung ca. 2× schneller (4200×1200: 35,6 s → 17,3 s), bitgenau identische Welten (per Hash über 5 Seeds verifiziert).
+> - Alle Rechte an Terraria-Assets liegen bei Re-Logic, siehe [ASSETS.md](ASSETS.md).
+
 **[简体中文](README.md) | [English](README_EN.md)**
 
 > [!NOTE]

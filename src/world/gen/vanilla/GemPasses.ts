@@ -579,6 +579,8 @@ export function runGemTreesPass(st: TileStore, rng: RNG, gs: GenState,
   const rockFamily = (s: number): boolean =>
     STONE_FAMILY.has(s) || TILE_MOSS.has(s);
   const numDenom = st.w - 20;                            // cs:22233 num = maxTilesX-20
+  const gemTreeTypes: number[] = [];
+  for (let k = 0; k < 7; k++) gemTreeTypes.push(idsByVanillaSheet(583 + k).values().next().value ?? 0);
   for (let x = 20; x < st.w - 20; x++) {
     gp?.set(x / numDenom);                               // cs:22235-22237 Set(i/num) 逐列
     for (let y = Math.floor(gs.worldSurface); y < st.h - 20; y++) {
@@ -586,7 +588,7 @@ export function runGemTreesPass(st: TileStore, rng: RNG, gs: GenState,
       // 宝石树段（:22208-22237）：掷骰在液体判定之前（短路与求值序 1:1）
       const treeRoll = alwaysTry ? true : rng.nextInt(5) === 0;
       if (treeRoll && st.liquid[st.idx(x, y - 1)] === 0) {
-        const treeType = idsByVanillaSheet(583 + rng.nextInt(7)).values().next().value ?? 0;
+        const treeType = gemTreeTypes[rng.nextInt(7)];   // ★perf: was a TILE_DEFS scan per roll
         if (treeType) growGemTree(st, rng, x, y, treeType, 0, false, gs);
       }
       // 地下钟乳石（:22239-22262）：非海洋、空格、1/5 → 上下邻石族清坡 + PlaceTight

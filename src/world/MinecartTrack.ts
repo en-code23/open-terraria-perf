@@ -280,8 +280,7 @@ export function nearbyMask(st: TileStore, i: number, j: number): number {
 
 /** 写回前后轨帧（唯一写入口：保持 type/active 不变，走 setTile 联动渲染/联机） */
 function writeFrames(st: TileStore, i: number, j: number, front: number, back: number): void {
-  const idx = st.idx(i, j);
-  st.setTile(i, j, st.type[idx], front, back < 0 ? 0xFFFF : back);
+  st.setFrames(i, j, front, back < 0 ? 0xFFFF : back);
 }
 
 // ============================================================================

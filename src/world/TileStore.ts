@@ -19,7 +19,7 @@ export const enum LIQUID_TYPE {
  *  详见 onTileChanged 注）。'tile'=方块写面（setTile/坡/半砖/失活/deactivate）;
  *  'wallKill'=墙移除（KillWall :60895 FramesOnKillWall 限定面）;'wallPlace'=墙
  *  铺设/替换（SquareWallFrame,零 TileFrame）;'paint'=油漆/涂层（无 TileFrame）。 */
-export type TileChangedCause = 'tile' | 'wallKill' | 'wallPlace' | 'paint';
+export type TileChangedCause = 'tile' | 'wallKill' | 'wallPlace' | 'paint' | 'frame';
 
 export class TileStore {
   /** ★一百零八审计修:mod 注册的 tile 键→内部 id(装载期填充;生成 pass 解析用) */
@@ -432,6 +432,22 @@ export class TileStore {
     // ★BJ322：suppressListeners 窗内跳过监听派发（netReporter 不受影响——联机同步面照常）
     // ★BJ752-A：cause='tile'（KillTile/PlaceTile 尾 SquareTileFrame 面）
     if (!this.suppressListeners) this.listeners.forEach((fn) => fn(x, y, 'tile'));
+  }
+
+  /** Frame-only rewrite (e.g. Minecart.FrameTrack re-framing a track). Vanilla writes the
+   *  frame bits directly with no TileFrame, so this dispatches cause 'frame': visual
+   *  listeners (chunk re-bake) still react, while the survival/support chain, which only
+   *  handles 'tile', does not. Unchanged frames are a no-op. Re-framing through setTile
+   *  made neighbouring track tiles re-trigger each other forever and froze the game. */
+  setFrames(x: number, y: number, frameX: number, frameY: number) {
+    if (!this.inBounds(x, y)) return;
+    const i = this.idx(x, y);
+    if (this.frameX[i] === frameX && this.frameY[i] === frameY) return;
+    this.frameX[i] = frameX;
+    this.frameY[i] = frameY;
+    if (this.tileWriteLog) this.tileWriteLog.push(i);
+    if (this.netReporter && !this.netSuppress) this.netReporter({ a: TileOpAction.SetTile, x, y, v: this.type[i], fx: frameX, fy: frameY });
+    if (!this.suppressListeners) this.listeners.forEach((fn) => fn(x, y, 'frame'));
   }
 
   /** 运行期改半砖/坡面位（锤子交互用；生成期直接写数组即可） */

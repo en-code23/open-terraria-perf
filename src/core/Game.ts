@@ -3763,6 +3763,10 @@ export function townNpcArrivalGate(worldUpdateRate: number, tickCount: number): 
   return tickCount % interval === Math.min(600, interval - 1);
 }
 
+
+/** Survival-chain work queue opcodes (see Game.queueSurvivalCheck). */
+const SURV_FURNITURE = 0, SURV_DECOR_SQUARE = 1, SURV_WALL_KILL = 2;
+
 export class Game implements GameHooks {
   /** FlexibleWandCycleOffset（Player.cs:3028 静态；持碎块魔杖族按 ↑/↓ 循环样式，
    *  UpdateControlHolds :28614-28626） */
@@ -52987,12 +52991,43 @@ private static readonly BOULDER_SUPPORT_SHEETS = BOULDERS_SHEETS;
    *  'tile'（防御,BJ754 TF-15 同惯例）。 */
   private wireSurvivalChainListeners(store: { onTileChanged(fn: (x: number, y: number, cause?: string) => void): void }): void {
     store.onTileChanged((x, y, cause) => {
-      if (cause === undefined || cause === 'tile') this.checkFurnitureSupport(x, y - 1);
-      else if (cause === 'wallKill') this.dispatchWallKillFrame(x, y);
+      if (cause === undefined || cause === 'tile') {
+        this.queueSurvivalCheck(SURV_FURNITURE, x, y - 1);
+        this.queueSurvivalCheck(SURV_DECOR_SQUARE, x, y);
+      } else if (cause === 'wallKill') {
+        this.queueSurvivalCheck(SURV_WALL_KILL, x, y);
+      }
     });
-    store.onTileChanged((x, y, cause) => {
-      if (cause === undefined || cause === 'tile') this.checkDecorSquareFrame(x, y);
-    });
+  }
+
+  /** Pending survival checks as flat (op, x, y) triples (lazily created: test shells
+   *  build Game via Object.create and never run field initialisers). */
+  private _survQueue?: number[];
+  private _survDraining?: boolean;
+
+  /** ★perf/crash fix: survival checks used to run recursively inside the tile-change
+   *  listener, so a long cascade (each kill → setTile → listener → next check) grew the
+   *  call stack by several frames per tile and threw "Maximum call stack size exceeded"
+   *  on generated worlds, which tripped the frame-loop fuse and froze the game.
+   *  Checks triggered while a drain is running are now queued and processed
+   *  iteratively. A top-level tile change still finishes its whole cascade
+   *  synchronously before returning, so callers observe the same final state. */
+  private queueSurvivalCheck(op: number, x: number, y: number): void {
+    const q = (this._survQueue ??= []);
+    q.push(op, x, y);
+    if (this._survDraining) return;
+    this._survDraining = true;
+    try {
+      for (let i = 0; i < q.length; i += 3) {
+        const o = q[i], qx = q[i + 1], qy = q[i + 2];
+        if (o === SURV_FURNITURE) this.checkFurnitureSupport(qx, qy);
+        else if (o === SURV_DECOR_SQUARE) this.checkDecorSquareFrame(qx, qy);
+        else this.dispatchWallKillFrame(qx, qy);
+      }
+    } finally {
+      q.length = 0;
+      this._survDraining = false;
+    }
   }
 
   /** ★BJ752-A（2026-11-02,issue#39 TF-02/03）：KillWall 尾限定派发（WorldGen.cs

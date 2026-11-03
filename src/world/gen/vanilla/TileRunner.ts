@@ -15,14 +15,44 @@ const HARDSAND = TILE_BY_KEY['hardened_sand']!;
 const MARBLE = TILE_BY_KEY['v_367_marble_block']!;
 const GRANITE = TILE_BY_KEY['v_368_granite_block']!;
 
-/** 按 vanilla sheet id 收集本仓库 tile id(缺失的自动跳过) */
-export function idsByVanillaSheet(...sheets: number[]): Set<number> {
-  const out = new Set<number>();
-  for (const d of TILE_DEFS) {
-    const vs = d.vanilla?.sheet;
-    if (vs !== undefined && sheets.includes(vs)) out.add(TILE_BY_KEY[d.key]);
+/** sheet → [defIndex, tileId] pairs in TILE_DEFS order; rebuilt if mods append defs. */
+let sheetIndex: Map<number, Array<[number, number]>> | null = null;
+let sheetIndexLen = -1;
+
+function sheetPairs(sheet: number): Array<[number, number]> | undefined {
+  if (sheetIndex === null || sheetIndexLen !== TILE_DEFS.length) {
+    sheetIndex = new Map();
+    for (let i = 0; i < TILE_DEFS.length; i++) {
+      const d = TILE_DEFS[i];
+      const vs = d?.vanilla?.sheet;
+      if (vs === undefined) continue;
+      let list = sheetIndex.get(vs);
+      if (!list) sheetIndex.set(vs, (list = []));
+      list.push([i, TILE_BY_KEY[d.key]]);
+    }
+    sheetIndexLen = TILE_DEFS.length;
   }
-  return out;
+  return sheetIndex.get(sheet);
+}
+
+/** 按 vanilla sheet id 收集本仓库 tile id(缺失的自动跳过)
+ *  ★perf: indexed lookup instead of scanning every TILE_DEFS entry per call (this was
+ *  called once per candidate cell in the gem-tree pass, ~4 s of a small world's
+ *  generation). Iteration order of the returned Set is unchanged (TILE_DEFS order). */
+export function idsByVanillaSheet(...sheets: number[]): Set<number> {
+  if (sheets.length === 1) {
+    const pairs = sheetPairs(sheets[0]);
+    const out = new Set<number>();
+    if (pairs) for (const [, id] of pairs) out.add(id);
+    return out;
+  }
+  const all: Array<[number, number]> = [];
+  for (const s of new Set(sheets)) {
+    const pairs = sheetPairs(s);
+    if (pairs) all.push(...pairs);
+  }
+  all.sort((a, b) => a[0] - b[0]);
+  return new Set(all.map(([, id]) => id));
 }
 
 // 原版 Main.tileStone(Main.cs:6120-6139):宝石 63-68 + 活/失活石 130/131 + 琥珀石 566。

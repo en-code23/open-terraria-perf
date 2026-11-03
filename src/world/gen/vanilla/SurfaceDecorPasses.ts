@@ -1297,7 +1297,29 @@ export function runFallenLogsPass(st: TileStore, rng: RNG, gs: GenState): void {
         // ★IIIII195（cs:18704-18706≡1458 同行）：`j > worldSurface-10.0 && !remixWorldGen`——
         //   remix **豁免**此拒置门（remix 深带 808± 远大于 worldSurface-10,若漏豁免
         //   则 remix 全受理面被误杀）；非 remix 语义零变。
-        if (j > gs.worldSurface - 10 && !gs.seedFlags.remix) {
+        // ★UUUUUU（cs:18767）：基座族四支——草 2 ∪（NTB 丛林草 60）∪（★IIIII110
+        //   worldIsFrozen 雪 147）∪（surfaceIsDesert 沙 53）。冻结世界地表草已在本链
+        //   前位 Ice pass（#55<x86 dump 序）被 DoWorldIsFrozen 换型成雪，倒木水景
+        //   要还认得出"原草岸"必须靠 147 支承接（x86 同理）。
+        const ntb = !!gs.seedFlags?.notTheBees;
+        const frozen = !!gs.seedFlags?.worldIsFrozen;
+        const desertSeed = !!gs.seedFlags?.surfaceIsDesert;
+        const base = sheetAt(st, x, j);
+        const baseL = sheetAt(st, x - 1, j);
+        const baseR = sheetAt(st, x + 1, j);
+        const baseOk = (s: number): boolean =>
+          s === 2 || (ntb && s === 60) || (frozen && s === 147) || (desertSeed && s === 53);
+        const grassHere = baseOk(base);
+        const grassL = baseOk(baseL);
+        const grassR = baseOk(baseR);
+        const dryAbove = st.inBounds(x, j - 1) && (st.liquid[st.idx(x, j - 1)] === 0 || budget < relaxAt / 5);
+        // ★perf: the 100×100 biome scan and 20×10 clearance scan below only feed `ok`;
+        //  they read state and roll no dice, and the final placement also needs the
+        //  cheap grass/dry predicates. Evaluating those first and skipping the scans
+        //  for doomed candidates gives identical results (verified by world hash) at a
+        //  fraction of the cost (~10k cell reads per rejected attempt before).
+        const tooDeep = j > gs.worldSurface - 10 && !gs.seedFlags.remix;
+        if (tooDeep || !(dryAbove && grassHere && grassL && grassR)) {
           ok = false;
         } else if (!relaxed) {
           // 50×50 群系回避（cs:18692-18728）：云 189/沙 53/地牢砖/腐化/猩红
@@ -1327,22 +1349,6 @@ export function runFallenLogsPass(st: TileStore, rng: RNG, gs: GenState): void {
             }
           }
         }
-        // ★UUUUUU（cs:18767）：基座族四支——草 2 ∪（NTB 丛林草 60）∪（★IIIII110
-        //   worldIsFrozen 雪 147）∪（surfaceIsDesert 沙 53）。冻结世界地表草已在本链
-        //   前位 Ice pass（#55<x86 dump 序）被 DoWorldIsFrozen 换型成雪，倒木水景
-        //   要还认得出"原草岸"必须靠 147 支承接（x86 同理）。
-        const ntb = !!gs.seedFlags?.notTheBees;
-        const frozen = !!gs.seedFlags?.worldIsFrozen;
-        const desertSeed = !!gs.seedFlags?.surfaceIsDesert;
-        const base = sheetAt(st, x, j);
-        const baseL = sheetAt(st, x - 1, j);
-        const baseR = sheetAt(st, x + 1, j);
-        const baseOk = (s: number): boolean =>
-          s === 2 || (ntb && s === 60) || (frozen && s === 147) || (desertSeed && s === 53);
-        const grassHere = baseOk(base);
-        const grassL = baseOk(baseL);
-        const grassR = baseOk(baseR);
-        const dryAbove = st.inBounds(x, j - 1) && (st.liquid[st.idx(x, j - 1)] === 0 || budget < relaxAt / 5);
         if (ok && dryAbove && grassHere && grassL && grassR) {
           j--;
           const placed = place3x2(st, x, j, FALLEN_LOG, 488, 0);       // PlaceTile(x, j, 488)
