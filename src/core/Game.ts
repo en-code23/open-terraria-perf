@@ -1,4 +1,5 @@
 // 游戏主控制器：状态、主循环、挖掘/放置/战斗/生成/存档的总装
+import { FORK_DEV_KEYS } from './forkDev';
 import { directorCamTarget, directorInputLocked, directorMoveInput } from '../mods/director';
 import { Achievements } from './Achievements';
 import { advanceGameTimeTick, globalTimeWrappedHourly } from './GameTime';   // ★BJ330 GTW 钟源（Main.TotalGameTime 等价）
@@ -7179,7 +7180,7 @@ export class Game implements GameHooks {
       // 调试键迁移（2026-08-20）：F1/F2/F3 让位原版 Loadout1/2/3 配装热键，
       // 原 F1 像素画导入/F2 无敌挪 Shift+F1/F2（Input 对 F1-F3 统一 preventDefault；
       // 探针 scripts/_f6-panel.mjs 已同步改按 Shift+F2）。★Shift 组合不再触发配装
-      if (e.shiftKey) {
+      if (e.shiftKey && FORK_DEV_KEYS) {   // Fork: Debug-Tasten nur im Entwicklermodus
         if (code === 'F1') this.openPixelArtImport();
         else if (code === 'F2') this.toggleDebugGod();
       }

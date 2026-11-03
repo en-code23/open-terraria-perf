@@ -1,5 +1,6 @@
 // 入口：加载素材/字体/文案 → VUI 主菜单 → 生成/加载世界 → 进入游戏
 // 流程编排见 mainFlow.ts；本文件只做装配 + 游戏内键盘/开发者工具接线。
+import { FORK_DEV_KEYS } from './core/forkDev';
 import { installTerrariaSkin } from './ui/TerrariaSkin';
 import './workers/procShim';   // ★首导入兜底(见 procShim.ts;worker 侧同款已挂 worldGen.worker)
 import { Game } from './core/Game';
@@ -195,6 +196,8 @@ let flow: FlowHandle | undefined;
 Sfx.onEvent = (k, d, tag) => flow?.game?.audioRec.sfx.log(tag ? `${k}@ui` : k, d);
 audio.onEvent = (k, d) => flow?.game?.audioRec.bgm.log(k, d);   // sel/start/stop/fail/ended(ended+无 stoppedByFade=loop 失效哨兵)
 let inGame = false;
+/** Fork: Einstellungen im Spiel wie im Original (kein eigenes Pausenmenü) */
+const FORK_VANILLA_INGAME_OPTIONS = true;
 let pausePanel: HTMLElement | null = null;
 /** ★A9:暂停浮层开启前的 uiBlocking 沿(关闭还原非覆写) */
 let pauseSavedBlocking = false;
@@ -460,6 +463,27 @@ function openInGamePause(game: Game): void {
   if (ui.inventoryOpen) ui.closeInventory();
   game.paused = true;
   pauseSavedBlocking = game.input.uiBlocking;   // ★A9(2026-10-14):沿保存(close 还原非覆写)
+  // Fork: wie im Original öffnet „Einstellungen“ direkt das Einstellungs-Panel
+  // (IngameOptions) mit „Speichern und beenden“ in der linken Spalte. Das
+  // eigene Pausenmenü (Resume/Save Game/Developer Options) entfällt.
+  if (FORK_VANILLA_INGAME_OPTIONS && flow) {
+    const panel = flow.openSettings(true, {
+      onBack: () => { if (pausePanel) finishInGamePause(game); },
+      extraActions: [{
+        label: Lang.text('LegacyInterface.35'),
+        onClick: () => {
+          const p = pausePanel;
+          pausePanel = null;   // onBack → finishInGamePause wird so zum No-op (kein Inventar-Wiederöffnen)
+          p?.querySelector<HTMLElement>('.sw-set-footer .sw-set-back')?.click();
+          game.input.uiBlocking = pauseSavedBlocking;
+          game.paused = false;
+          inGame = false;
+          flow?.quitToMenu();
+        },
+      }],
+    });
+    if (panel) { pausePanel = panel; return; }
+  }
   pausePanel = ui.showPause({
     onResume: () => {
       closeInGamePause(game);   // ★SW-RB8c：Close 面=收浮层+回背包（:108）
@@ -509,6 +533,16 @@ function openInGamePause(game: Game): void {
  *  被死亡 UI 收支,本仓取稳态面,登记）。面板切换出口（onHousing/onItemSearch 等件
  *  停车坪）不经此——SW 自有面板面,原版无对应物。 */
 function closeInGamePause(g: Game): void {
+  // Fork: ist das Einstellungs-Panel der „Pausen“-Zustand → über seinen eigenen
+  // Zurück-Knopf schließen (räumt Esc-/Sprach-Listener auf, ruft finishInGamePause)
+  if (pausePanel?.classList.contains('sw-set-panel')) {
+    const back = pausePanel.querySelector<HTMLElement>('.sw-set-footer .sw-set-back');
+    if (back && pausePanel.isConnected) { back.click(); return; }
+  }
+  finishInGamePause(g);
+}
+
+function finishInGamePause(g: Game): void {
   pausePanel?.remove();
   pausePanel = null;
   g.paused = false;
@@ -629,6 +663,13 @@ window.addEventListener('keydown', (e) => {
   // ---- Shift 组合键（2026-08-28 用户澄清终态）：各键保留各自原功能,仅首次使用
   //  时弹同款确认门（featureGate 按功能分键持久）;★Shift+F10 = 地图点击传送开关,
   //  ★Shift+F2 = 无限生命和魔力（Game.toggleDebugGod）——均不互相顶替 ----
+  // Fork: F3–F10-Debugfunktionen (Hitboxen, Karte aufdecken, F5-Bericht/Aufnahme,
+  // Beschwörungs-Panel, Kabel, Spawns, Volle Helligkeit, Karten-Teleport) nur im
+  // Entwicklermodus (?dev=1). F5 lädt die Seite trotzdem nicht neu.
+  if (!FORK_DEV_KEYS && /^F([3-9]|10)$/.test(e.code)) {
+    if (e.code === 'F5') e.preventDefault();
+    return;
+  }
   switch (e.code) {
     case 'KeyS':
       // Ctrl+S 快速存档（原 F6 让位召唤面板后迁入）

@@ -26,6 +26,9 @@ export interface SettingsFlow {
   /** ★SW-FX18 成就页入口（IngameOptions.cs:294 OpenAchievements 等价）；
    *  缺省不渲染入口（主菜单直开设置时无成就实例宿主） */
   onAchievements?(): void;
+  /** Fork: zusätzliche Einträge unten in der Kategorienspalte (im Spiel z. B.
+   *  „Speichern und beenden“ wie IngameOptions im Original) */
+  extraActions?: Array<{ label: string; onClick: () => void }>;
 }
 
 const CSS = `
@@ -72,6 +75,25 @@ const CSS = `
 .sw-set-lang-grid button:hover { background: #4a5aa0; }
 .sw-set-lang-grid button.active { outline: 1px solid #ffd76e; background: #5a6ac0; }
 .sw-set-hint { color:#8a90b8; font-size:12px; }
+/* ---- Fork: Optik wie das Original (UIPanel-Farben 63,82,151 ×0.7 / schwarzer Rand,
+   Kategorien als große Textliste wie IngameOptions, Auswahl/Hover gelb 255,231,69) ---- */
+.sw-set-panel { background: rgba(63,82,151,.86); border: 2px solid #000; border-radius: 10px;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.08) inset, 0 8px 40px rgba(0,0,0,.5); width: 640px; }
+.sw-set-title { font-size: 26px; color: #fff; }
+.sw-set-cats { width: 170px; gap: 2px; }
+.sw-set-cats div { background: none; border: none; outline: none; padding: 3px 4px; text-align: left;
+  font-size: 22px; color: rgb(190,190,190); text-shadow: 2px 0 0 #000,-2px 0 0 #000,0 2px 0 #000,0 -2px 0 #000;
+  transition: transform .12s; transform-origin: left center; }
+.sw-set-cats div:hover { color: rgb(255,231,69); transform: scale(1.06); }
+.sw-set-cats div.active { background: none; outline: none; color: rgb(255,231,69); }
+.sw-set-cats div.sw-set-extra { margin-top: 18px; }
+.sw-set-content { background: rgba(20,28,62,.55); border: 2px solid rgba(0,0,0,.65); border-radius: 8px; }
+.sw-set-btns button, .sw-set-back, .sw-set-lang-grid button { background: rgba(63,82,151,.9);
+  border: 2px solid #000; border-radius: 6px; }
+.sw-set-btns button:hover, .sw-set-back:hover, .sw-set-lang-grid button:hover { background: rgba(83,104,184,.95);
+  border-color: rgb(255,231,69); }
+.sw-set-lang-grid button.active { outline: none; border-color: rgb(255,231,69); background: rgba(83,104,184,.95); }
+.sw-set-row .val { color: #fff; }
 /* 键位行（M5）：action 名列宽 + 键按钮等宽 + 监听/未绑定态 */
 .sw-set-row.sw-kb-row > span:first-child { width: 118px; }
 .sw-kb-btn { min-width: 118px; text-align: center; flex: 1; }
@@ -163,6 +185,14 @@ export class SettingsPanel {
       div.dataset.cat = c;
       div.textContent = this.catLabel(c);
       div.addEventListener('click', () => { this.cat = c; this.build(); });
+      cats.appendChild(div);
+    }
+    for (const a of this.flow.extraActions ?? []) {
+      const div = document.createElement('div');
+      div.className = 'sw-set-extra';
+      div.dataset.extra = '1';
+      div.textContent = a.label;
+      div.addEventListener('click', () => { UISfx.click(); a.onClick(); });
       cats.appendChild(div);
     }
     this.panel.querySelector('.sw-set-cats')!.replaceWith(cats);

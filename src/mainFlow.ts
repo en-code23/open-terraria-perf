@@ -81,7 +81,7 @@ export interface FlowHandle {
   /** ★BJ280：更新横幅「保存后刷新」通道——静默存档全链落定→清卸载拦截态→reload
    *  （存档失败也刷新,BJ144 取舍;拦截态无条件解除=用户明示动作不二次弹窗） */
   saveAndReload(): void;
-  openSettings(inGame: boolean): void;
+  openSettings(inGame: boolean, opts?: { onBack?: () => void; extraActions?: Array<{ label: string; onClick: () => void }> }): HTMLElement | null;
   openBestiary(): void;
   /** 住房面板（背包房屋按钮 B 方案,2026-08-15） */
   openHousing?(): void;
@@ -661,7 +661,9 @@ function makeGame(): Game {
                 missing.map((m) => `${m.id} v${m.version}`).join(', ')));
             }
           }
-          maybeDev(g); applyAppearance(g); maybeShowWelcomeAnnounce();
+          maybeDev(g); applyAppearance(g);
+          // Fork: chinesisches Willkommens-Popup entfällt (Hinweise stehen in Credits/Hauptmenü)
+          if (!FORK_NO_WELCOME_TOAST) maybeShowWelcomeAnnounce();
         });
       },
       // ★wbake 转正批：冻结窗开/关沿 → 游玩时长计费暂停/续走（原版 UpdatePlayTimer
@@ -1911,12 +1913,13 @@ function makeGame(): Game {
   }
 
   /** 设置面板（★资源包/数据栏已摘 2026-08-27 用户要求;inGame 语义随之退役） */
-  function openSettings(_inGame: boolean) {
+  function openSettings(_inGame: boolean, opts?: { onBack?: () => void; extraActions?: Array<{ label: string; onClick: () => void }> }): HTMLElement | null {
     // 已开守卫(2026-08-13 泄露 review):无守卫时暂停菜单里重复点"设置"
     // 叠面板,每层多 1 个 window Esc + 1 个 Lang 订阅
-    if (document.querySelector('.sw-set-panel')) return;
+    if (document.querySelector('.sw-set-panel')) return null;
     new SettingsPanel(root, {
-      onBack: () => { /* 面板自毁 */ },
+      onBack: () => { opts?.onBack?.(); },
+      extraActions: opts?.extraActions,
       // ★SW-FX18 成就页入口（IngameOptions.cs:294 DrawLeftSide(Lang.menu[131]) →
       // IngameFancyUI.OpenAchievements 等价）：世界内用 Game 级成就实例,
       // 主菜单直开设置走菜单级桥；面板叠开,设置面板留在下层（原版 SetState 同层叠）
@@ -1926,6 +1929,7 @@ function makeGame(): Game {
         else openMenuAchievements();
       },
     });
+    return document.querySelector('.sw-set-panel');
   }
 
   /** 图鉴面板（UIBestiaryTest 1:1 结构：网格分页/筛选排序/条目卡/完成度条）。
