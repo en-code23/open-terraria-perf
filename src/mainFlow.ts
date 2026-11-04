@@ -1508,7 +1508,8 @@ function makeGame(): Game {
       console.info('[vanilla-flow] join 启动 target=' + target);
       const [host, portRaw] = target.split(':');
       const port = parseInt(portRaw || '7777', 10);
-      const bridgePort = new URLSearchParams(location.search).get('vbridge') ?? '5290';
+      const vbParam = new URLSearchParams(location.search).get('vbridge') ?? '';
+      const bridgePort = /^\d{2,5}$/.test(vbParam) ? vbParam : '5290';
       // 诊断透传（?vdump=NAME → 桥下行帧账 /tmp/vbridge-NAME.log——服务器对我方连接发了什么）
       const vdump = new URLSearchParams(location.search).get('vdump');
       const g = makeGame();

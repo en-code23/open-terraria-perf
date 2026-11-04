@@ -229,14 +229,15 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/upload' && req.method === 'POST') {
       const data = await readBody(req, 200 * 1024 * 1024);
       if (data.length < 64) throw new Error('keine Weltdatei');
-      if (fs.readdirSync(LAN_WORLDS).filter((n) => n.endsWith('.wld')).length >= MAX_LAN_WORLDS && url.searchParams.get('replace') !== '1') {
-        throw new Error(`zu viele LAN-Welten (max. ${MAX_LAN_WORLDS})`);
-      }
       const name = safeName(url.searchParams.get('name'));
       let p = path.join(LAN_WORLDS, `${name}.wld`);
       const inUse = (q) => [...servers.values()].some((x) => x.file === q);
       if (fs.existsSync(p) && (url.searchParams.get('replace') !== '1' || inUse(p))) {
         let i = 2; while (fs.existsSync(p) || inUse(p)) p = path.join(LAN_WORLDS, `${name} ${i++}.wld`);
+      }
+      // Obergrenze gilt für jede NEUE Datei; nur echtes Ersetzen einer vorhandenen ist frei
+      if (!fs.existsSync(p) && fs.readdirSync(LAN_WORLDS).filter((n) => n.endsWith('.wld')).length >= MAX_LAN_WORLDS) {
+        throw new Error(`zu viele LAN-Welten (max. ${MAX_LAN_WORLDS})`);
       }
       fs.writeFileSync(p, data);
       return send(res, 200, { ok: true, file: `browser/${path.basename(p)}` });

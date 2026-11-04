@@ -407,7 +407,8 @@ export function isLocalNetAddr(h: string): boolean {
     const [x, y] = [Number(m[1]), Number(m[2])];
     return x === 127 || x === 10 || (x === 192 && y === 168) || (x === 172 && y >= 16 && y <= 31) || (x === 169 && y === 254);
   }
-  return /^(f[cd]|fe[89ab])[0-9a-f]*:/.test(a);
+  // IPv6: nur reine Hex-/Doppelpunkt-Literale (voll verankert, keine Zusätze wie „@host“)
+  return /^[0-9a-f:]+$/.test(a) && a.includes(':') && /^(f[cd]|fe[89ab])[0-9a-f]{0,2}:/.test(a);
 }
 function helperBase(): string {
   const q = new URLSearchParams(location.search);
