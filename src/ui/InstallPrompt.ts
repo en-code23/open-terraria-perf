@@ -43,6 +43,7 @@ export function mountInstallPrompt(): void {
   };
   const show = (iosGuide: boolean) => {
     if (bar || document.getElementById('sw-install-bar')) return;
+    const de = (navigator.language || '').toLowerCase().startsWith('de');
     bar = document.createElement('div');
     bar.id = 'sw-install-bar';
     bar.innerHTML = `
@@ -59,11 +60,15 @@ export function mountInstallPrompt(): void {
         #sw-install-bar button:hover { background: #4a3a7a; border-color: #ffd76e; }
         #sw-install-bar .x { background: none; border: none; color: #9fb0e0; font-size: 16px;
           padding: 2px 6px; cursor: pointer; }
+        /* Fork: im Spiel (Touch-Steuerung aktiv) nicht über Hotbar/Herzen legen */
+        body:has(.sw-mobile) #sw-install-bar { display: none; }
       </style>
       <span class="t">${iosGuide
-        ? '添加到主屏幕:点 Safari 底部「分享」→「添加到主屏幕」,离线可玩、独占全屏'
-        : '将 SandboxWorld 安装到桌面——离线可玩、独立窗口、不再重复下载'}</span>
-      ${iosGuide ? '' : '<button data-a="install">安装</button>'}
+        ? (de ? 'Tipp: Safari „Teilen“ → „Zum Home-Bildschirm“ – startet dann im Vollbild'
+          : 'Tip: Safari "Share" → "Add to Home Screen" – then it starts fullscreen')
+        : (de ? 'Open-Terraria als App installieren (eigenes Fenster)'
+          : 'Install Open-Terraria as an app (own window)')}</span>
+      ${iosGuide ? '' : `<button data-a="install">${de ? 'Installieren' : 'Install'}</button>`}
       <button class="x" data-a="x">✕</button>
     `;
     document.body.appendChild(bar);

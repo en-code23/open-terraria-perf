@@ -46,15 +46,25 @@ if ! curl -sf -o /dev/null "\$URL"; then
   STARTED=1
   for i in \$(seq 1 120); do curl -sf -o /dev/null "\$URL" && break; sleep 0.5; done
 fi
+# LAN-Helfer (Mehrspieler mit dem echten Terraria-Server), falls nicht schon aktiv
+HELPER=""
+if ! curl -sf -o /dev/null "http://localhost:5290/lan"; then
+  cd "\$ROOT"
+  node scripts/lan-host.mjs >> "\$LOG" 2>&1 &
+  HELPER=\$!
+fi
 "$CHROME" --app="\$URL" --start-fullscreen --user-data-dir="\$PROFILE" \\
   --no-first-run --no-default-browser-check --disable-features=Translate >> "\$LOG" 2>&1
 if [ "\$STARTED" = 1 ]; then kill "\$SERVER" 2>/dev/null; pkill -P "\$SERVER" 2>/dev/null || true; fi
+# Helfer beenden → speichert laufende LAN-Welten (bis 20 s)
+if [ -n "\$HELPER" ]; then kill -TERM "\$HELPER" 2>/dev/null; for i in \$(seq 1 40); do kill -0 "\$HELPER" 2>/dev/null || break; sleep 0.5; done; fi
 LAUNCH
 chmod +x "$APP/Contents/MacOS/launcher"
 
-# Icon aus dem Favicon des Projekts (lokal)
-if [ -f "$ROOT/public/icons/icon-512.png" ] || [ -f "$ROOT/public/favicon.png" ]; then
-  SRC="$ROOT/public/icons/icon-512.png"; [ -f "$SRC" ] || SRC="$ROOT/public/favicon.png"
+# Icon: App-Icon im macOS-Stil (abgerundet, mit Rand), sonst Favicon
+if [ -f "$ROOT/public/icons/icon-mac-1024.png" ] || [ -f "$ROOT/public/icons/icon-512.png" ] || [ -f "$ROOT/public/favicon.png" ]; then
+  SRC="$ROOT/public/icons/icon-mac-1024.png"
+  [ -f "$SRC" ] || SRC="$ROOT/public/icons/icon-512.png"; [ -f "$SRC" ] || SRC="$ROOT/public/favicon.png"
   ICONSET="$(mktemp -d)/icon.iconset"; mkdir -p "$ICONSET"
   for s in 16 32 128 256 512; do
     sips -z $s $s "$SRC" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null 2>&1 || true

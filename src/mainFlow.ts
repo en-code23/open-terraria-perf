@@ -1530,7 +1530,9 @@ function makeGame(): Game {
       // 随身态 stash（msg5 真物品上传:服务器侧防御/伤害正确的生存基础）
       (g as unknown as { pendingJoinItems?: unknown }).pendingJoinItems = diskForm;
       ui.showProgress(Lang.text('Mods.SandboxWorld.Progress.Connecting'), 0.1);
-      await g.joinVanillaGame(`ws://127.0.0.1:${bridgePort}/?host=${encodeURIComponent(host)}&port=${port}${vdump ? `&dump=${vdump}` : ''}`,
+      // Fork: Brücke läuft auf dem Rechner, der das Spiel ausliefert (LAN: iPad/Handy → Mac)
+      const bridgeHost = new URLSearchParams(location.search).get('vbridgehost') ?? (location.hostname || '127.0.0.1');
+      await g.joinVanillaGame(`ws://${bridgeHost.includes(':') && !bridgeHost.startsWith('[') ? `[${bridgeHost}]` : bridgeHost}:${bridgePort}/?host=${encodeURIComponent(host)}&port=${port}${vdump ? `&dump=${vdump}` : ''}`,
         (label, p) => ui.showProgress(label, 0.1 + p * 0.8));
       // 本地角色态回放（joinRoom 非 SSC 同款语义:vanilla 非 SSC 服=客户端权威,
       // 本地物品与上传账一致;缺这步=本地默认背包 vs 服务器真装备分叉）
@@ -1636,6 +1638,11 @@ function makeGame(): Game {
         });
       },
       onBack: () => { closePanel(); showTitle(); },
+      // Fork: LAN-Welten (echter Terraria-Server): Browser-Welt → .wld und zurück
+      exportWld: (json) => saveClient.exportWld(json),
+      importWld: async (bytes, name) => {
+        await importWorldFile(new File([bytes as BlobPart], `${name}.wld`, { type: 'application/octet-stream' }));
+      },
       // 创建房间资产链(2026-08-25 用户要求,单人式流程):角色选择 → 世界列表 →
       // 选定世界读存档 JSON → then 继续建房。新建世界暂引导去单人创建(备案:
       // worldStore.register 在进游戏后才登记,无"只建不进"的廉价 API)

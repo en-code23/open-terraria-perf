@@ -187,9 +187,17 @@ function flush(): void {
   }
 }
 
+/** Chinesische Tooltips (title-Attribut) übersetzen */
+function fixTitle(el: Element): void {
+  const t = el.getAttribute('title');
+  if (t && hasCjk(t)) { const tr = translateZh(t); if (tr !== t) el.setAttribute('title', tr); }
+}
+
 function scanTree(root: Node): void {
   if (root.nodeType === 3) { const p = root.parentElement; if (p) schedule(p); return; }
   if (root.nodeType !== 1) return;
+  fixTitle(root as Element);
+  (root as Element).querySelectorAll('[title]').forEach(fixTitle);
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let n: Node | null;
   while ((n = walker.nextNode())) {
@@ -327,11 +335,12 @@ export function installTerrariaSkin(): void {
         if (m.target instanceof HTMLElement && m.target.childNodes.length) schedule(m.target);
         m.addedNodes.forEach(scanTree);
       } else if (m.type === 'attributes' && m.target instanceof Element) {
-        rerenderSkinnedIn(m.target);
+        if (m.attributeName === 'title') fixTitle(m.target);
+        else rerenderSkinnedIn(m.target);
       }
     }
   });
-  mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+  mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'title'] });
   // Hover-/Aktiv-Farben kommen aus CSS-Pseudoklassen → beim Betreten/Verlassen neu zeichnen
   const onHover = (e: Event) => {
     const t = e.target as HTMLElement | null;

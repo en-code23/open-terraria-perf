@@ -41,28 +41,43 @@ const FORK_TEXT = {
     credits: [
       'Terraria © Re-Logic. Alle Rechte an Spiel, Grafik, Musik und Sound liegen bei Re-Logic.',
       'Dies ist NICHT das Original und kein offizielles Re-Logic-Produkt.',
-      'Open-Terraria: Web-Nachbau von Vinlic, mit KI erstellt (GLM-5.3, Claude Code).',
-      'Diese Version: Performance- und Menü-Überarbeitung, mit KI erstellt (Claude).',
-      'Nur für private Lern- und Testzwecke. Bitte kauf das Original auf Steam.',
+      'Basis: Open-Terraria von Vinlic ({0}).',
+      'Diese Version: github.com/en-code23 – mit KI überarbeitet (Claude).',
+      '{1}',
+      '{2}',
     ],
-    footer: 'Kein Original · mit KI erstellt · Terraria © Re-Logic',
+    footer: 'Kein Original',
     buy: 'Original auf Steam kaufen',
+    github: 'GitHub: en-code23',
   },
   en: {
     credits: [
       'Terraria © Re-Logic. All rights to the game, art, music and sound belong to Re-Logic.',
       'This is NOT the original game and not an official Re-Logic product.',
-      'Open-Terraria: web remake by Vinlic, made with AI (GLM-5.3, Claude Code).',
-      'This build: performance and menu rework, made with AI (Claude).',
-      'For private learning and testing only. Please buy the original on Steam.',
+      'Based on: Open-Terraria by Vinlic ({0}).',
+      'This version: github.com/en-code23 – reworked with AI (Claude).',
+      '{1}',
+      '{2}',
     ],
-    footer: 'Not the original · made with AI · Terraria © Re-Logic',
+    footer: 'Not the original',
     buy: 'Buy the original on Steam',
+    github: 'GitHub: en-code23',
   },
 };
 function forkText() {
   return (Lang.activeCultureName ?? '').startsWith('de') ? FORK_TEXT.de : FORK_TEXT.en;
 }
+/** Credits-Seite: Fork-Hinweise + ursprüngliche Projekt-Credits + Version (alles hier, nicht auf dem Startbildschirm) */
+function creditLines(): string[] {
+  const t = (k: string, ...a: (string | number)[]) => Lang.text(k, ...a);
+  const fill: Record<string, string> = {
+    '{0}': t('Mods.SandboxWorld.Credits.Line1', 'GLM-5.3', 'GLM-5.3-Flash'),
+    '{1}': t('Mods.SandboxWorld.Credits.Line2'),
+    '{2}': `SandboxWorld v${APP_VERSION} ${BUILD_STAMP} · ${t('Mods.SandboxWorld.Title.RemakeBaseline')}`,
+  };
+  return forkText().credits.map((l) => l.replace(/\{[012]\}/g, (m) => fill[m]));
+}
+const GITHUB_URL = 'https://github.com/en-code23';
 const STEAM_URL = 'https://store.steampowered.com/app/105600/Terraria';
 
 /** Sun.png 114×114 / Moon_N.png 50×400（8 相位帧，帧宽 50）——SkyRenderer.ts:27-28 */
@@ -382,6 +397,7 @@ export class TitleMenu {
       <div class="sw-title-btns sw-title-credits" data-group="cred" hidden>
         ${forkText().credits.map((_, i) => `<div class="sw-title-line" data-line="${i}"></div>`).join('')}
         <div class="sw-title-btn" data-act="buy">${forkText().buy}</div>
+        <div class="sw-title-btn" data-act="gh">${forkText().github}</div>
         <div class="sw-title-btn" data-act="back">${Lang.text('UI.Back')}</div>
       </div>
     `;
@@ -397,9 +413,9 @@ export class TitleMenu {
         #sw-title-chrome { position: fixed; inset: 0; z-index: 35; pointer-events: none;
           opacity: var(--sw-splash-alpha, 1); }
       </style>
-      <div class="sw-title-version"><div>SandboxWorld v${APP_VERSION} ${BUILD_STAMP}</div><div class="sw-title-baseline">${Lang.text('Mods.SandboxWorld.Title.RemakeBaseline')}</div></div>
+      <div class="sw-title-version" style="display:none"><div>SandboxWorld v${APP_VERSION} ${BUILD_STAMP}</div><div class="sw-title-baseline">${Lang.text('Mods.SandboxWorld.Title.RemakeBaseline')}</div></div>
       <div data-credit style="position:fixed;right:10px;bottom:8px;font-size:13px;color:#fff;text-align:right;line-height:1.6;pointer-events:none;text-shadow:1px 0 0 #000,-1px 0 0 #000,0 1px 0 #000,0 -1px 0 #000;"></div>
-      <a data-buy href="${STEAM_URL}" target="_blank" rel="noopener" style="position:fixed;right:10px;bottom:52px;font-size:13px;color:#ffe628;pointer-events:auto;text-decoration:none;text-shadow:1px 0 0 #000,-1px 0 0 #000,0 1px 0 #000,0 -1px 0 #000;"></a>
+      <a data-buy href="${STEAM_URL}" target="_blank" rel="noopener" style="display:none;position:fixed;right:10px;bottom:52px;font-size:13px;color:#ffe628;pointer-events:auto;text-decoration:none;text-shadow:1px 0 0 #000,-1px 0 0 #000,0 1px 0 #000,0 -1px 0 #000;"></a>
     `;
     document.body.appendChild(this.chrome);
     this.logoDay = this.root.querySelector('.logo-day') as unknown as HTMLImageElement;
@@ -467,6 +483,7 @@ export class TitleMenu {
     on('packs', () => flow.onAssetPacks?.());   // ★原版资源包页(2026-10-12 退役 RemotionPanel 后改挂)
     on('set', () => flow.onSettings());
     on('buy', () => window.open(STEAM_URL, '_blank', 'noopener'));
+    on('gh', () => window.open(GITHUB_URL, '_blank', 'noopener'));
     on('replog', () => window.open('https://github.com/Vinlic/terraria-replica-build-notes', '_blank', 'noopener'));
     on('quit', () => flow.onQuit());
     parent.appendChild(this.root);
@@ -559,11 +576,8 @@ export class TitleMenu {
     }
     const credit = this.chrome.querySelector<HTMLElement>('[data-credit]');
     if (credit) {
-      this.paintSmall(credit, [
-        t('Mods.SandboxWorld.Credits.Line1', 'GLM-5.3', 'GLM-5.3-Flash'),
-        t('Mods.SandboxWorld.Credits.Line2'),
-        forkText().footer,
-      ]);
+      // Startbildschirm: nur der Hinweis; alle Credits stehen auf der Credits-Seite
+      this.paintSmall(credit, [forkText().footer]);
     }
     const buy = this.chrome.querySelector<HTMLElement>('[data-buy]');
     if (buy) this.paintSmall(buy, [forkText().buy], MENU_HOT);
@@ -668,13 +682,14 @@ export class TitleMenu {
     set('ach', t('LegacyMenu.131'));   // ★SW-FX18 成就页（menu[131] 同位）
     set('set', t('LegacyMenu.14'));
     set('buy', forkText().buy);
+    set('gh', forkText().github);
     set('ws', t('UI.Workshop'));
     set('cred', t('UI.Credits'));
     set('mods', t('Mods.SandboxWorld.Menu.Mods'));
     set('packs', t('UI.ResourcePacks'));
     set('back', t('UI.Back'));
     this.root.querySelectorAll<HTMLElement>('.sw-title-line').forEach((el) => {
-      const line = forkText().credits[Number(el.dataset.line)] ?? '';
+      const line = creditLines()[Number(el.dataset.line)] ?? '';
       el.dataset.label = line;
       el.textContent = line;
     });
@@ -684,14 +699,15 @@ export class TitleMenu {
     const credit = this.chrome.querySelector('[data-credit]');
     if (credit) {
       const bs = 'font-weight:700;margin:0 5px;text-shadow:1px 0 0 #fff,1px 0 0 #000,-1px 0 0 #000,0 1px 0 #000,0 -1px 0 #000';
-      credit.innerHTML = `${t('Mods.SandboxWorld.Credits.Line1', `<b style="${bs}">GLM-5.3</b>`, `<b style="${bs}">GLM-5.3-Flash</b>`)}<br>${t('Mods.SandboxWorld.Credits.Line2')}`;
+      void bs;   // Original-Zweizeiler (Credits.Line1/Line2) steht jetzt auf der Credits-Seite
+      credit.innerHTML = '';
     }
     // 左下复刻版本基准副行（随语言切换刷新）
     const baseline = this.chrome.querySelector('.sw-title-baseline');
     if (baseline) baseline.textContent = t('Mods.SandboxWorld.Title.RemakeBaseline');
     const buy = this.chrome.querySelector('[data-buy]');
     if (buy) buy.textContent = forkText().buy;
-    if (credit) credit.innerHTML += `<br>${forkText().footer}`;
+    if (credit) credit.textContent = forkText().footer;
     if (this.font) this.paintAll();
   }
 

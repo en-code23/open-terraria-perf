@@ -38,7 +38,7 @@ describe('SW-FX14 ① IngameOptions.cs:647-848 普查矩阵（缺省值=原版�
     // :745 Main.MouseShowBuildingGrid = false（Main.cs:257）
     expect(options.data.mouseShowBuildingGrid).toBe(false);
     // :797 Main.DialoguePortraitPreference = Detailed
-    expect(options.data.dialoguePortraitMode).toBe('detailed');
+    expect(options.data.dialoguePortraitMode).toBe('disabled');   // Fork: klassischer Dialog als Standard (Original: Detailed)
     // :815 Main.SettingsEnabled_OpaqueBoxBehindTooltips = true（Main.cs:249）
     expect(options.data.opaqueBoxBehindTooltips).toBe(true);
     // :824 快速丢弃三态缺省 Left Control（ItemSlot.cs:28-30 DLS=true/DQT=false）

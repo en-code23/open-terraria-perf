@@ -7364,6 +7364,9 @@ export class UI {
     // 2026-08-29 官方截图对齐:横屏(含手机)hotbar 保持原版 52px 一行不缩
     // (844 宽放得下 ~490px 行,官方平板/手机横屏同样原样);仅竖屏紧凑化
     if (hudTier() === 't3') return { cols: 5, q: 0.78 };   // 竖屏两行五列,视觉≈41px 格
+    // Fork: Touch quer (Handy/iPad) wie die Mobil-App: zwei Spalten senkrecht links
+    if (hudTier() === 't2') return { cols: 2, q: 0.66 };
+    if (hudTier() === 't1') return { cols: 2, q: 0.84 };
     return null;
   }
 
@@ -7408,7 +7411,8 @@ export class UI {
     this.hotbarEl?.classList.toggle('compact', !!compact);
     if (compact) {
       const step = Math.floor(52 * compact.q) + 4;   // 屏幕像素步进(选中差取消→恒定)
-      const rowH = Math.floor(52 * compact.q) + 12;
+      const vertical = compact.cols === 2;           // Fork: App-Layout (2×5 links)
+      const rowH = vertical ? step : Math.floor(52 * compact.q) + 12;
       const ox = safeInsets.left + 6;
       const oy = safeInsets.top + 8;
       for (let i = 0; i < 10; i++) {
@@ -7430,10 +7434,21 @@ export class UI {
         }
       }
       const rows = Math.ceil(10 / compact.cols);
+      if (vertical) {
+        // Fork: Name + Buffs rechts neben der Spalte (wie die App)
+        this.hotbarNameEl.style.left = `${ox + 2 * step + 6}px`;
+        this.hotbarNameEl.style.top = `${oy}px`;
+        this.hotbarNameEl.style.transform = 'none';
+        this.hotbarNameEl.style.fontSize = '12px';
+        if (this.buffBar) { this.buffBar.style.left = `${ox + 2 * step + 8}px`; this.buffBar.style.top = `${oy + 22}px`; }
+      } else {
       // 选中名:行尾下方居中(T3 两行/T2 单行各自锚点)
       this.hotbarNameEl.style.left = `${Math.round(ox + (compact.cols * step - step + 44) / 2)}px`;
       this.hotbarNameEl.style.top = `${oy + rows * rowH + 2}px`;
+      this.hotbarNameEl.style.transform = '';
       this.hotbarNameEl.style.fontSize = '11px';
+      if (this.buffBar) { this.buffBar.style.left = '32px'; this.buffBar.style.top = '76px'; }
+      }
     } else {
       let x = 20;
       // ★背包打开时热键栏整行均匀（2026-09-02 用户要求：不高亮/不放大当前项——
@@ -7463,6 +7478,8 @@ export class UI {
       this.hotbarNameEl.style.left = '236px';
       this.hotbarNameEl.style.top = '0px';
       this.hotbarNameEl.style.fontSize = '';
+      this.hotbarNameEl.style.transform = '';
+      if (this.buffBar) { this.buffBar.style.left = '32px'; this.buffBar.style.top = '76px'; }
     }
     // 说明按钮:紧凑档让位(467px 定位压 T2 行尾/T3 名区;桌面原位)
     if (this.manualBtn) this.manualBtn.style.display = compact ? 'none' : '';

@@ -72,7 +72,7 @@ function gm(a: number, b: number): number {
 
 /** AES-128-ECB 解密(无填充剥离,块数=bytes/16)。输入必须 16 的倍数 */
 export function aes128EcbDecrypt(input: Uint8Array): Uint8Array {
-  if (input.length === 0 || input.length % 16 !== 0) throw new Error('plr: 密文长度非 16 字节对齐');
+  if (input.length === 0 || input.length % 16 !== 0) throw new Error('Not a Terraria player file (bad length)');
   const key = KEY16;
   // 逆轮密钥扩展(FIPS-197:44 word)
   const w = new Uint8Array(176);
@@ -135,6 +135,11 @@ const META_MAGIC_LOW56 = 27981915666277746n;
 export const PLR_VERSION_1457 = 325;
 /** 支持域下限 = 1.2(2013-10):124 起字段序与 325 同构(armor20/dye10/inventory58) */
 export const PLR_VERSION_MIN = 124;
+/** Fork: Lese-Obergrenze 326 (= 1.4.5.8 Release, GameVersionID.Terraria1458Release).
+ *  1.4.5.8 ist ein Hotfix ohne neue Spielerfelder vor dem hier gelesenen Ende
+ *  (Temp-Slots) — wie bei .wld (WldParser: „326 und 325 gleich aufgebaut“).
+ *  Export bleibt 325 (liest jedes 1.4.5.x). */
+export const PLR_VERSION_READ_MAX = 326;
 
 export interface PlrImported {
   appearance: Appearance;
@@ -194,13 +199,13 @@ export function parsePlr(raw: Uint8Array): PlrImported {
   const plain = aes128EcbDecrypt(raw);
   const r = new BinaryReaderLE(plain);
   const version = r.i32();
-  if (version > PLR_VERSION_1457) throw new Error('角色档版本比当前支持的更新(1.4.5.7)');
-  if (version < PLR_VERSION_MIN) throw new Error('角色档过旧(仅支持 1.2 及以上)');
+  if (version > PLR_VERSION_READ_MAX) throw new Error(`Player file version ${version} is newer than supported (1.4.5.8)`);
+  if (version < PLR_VERSION_MIN) throw new Error('Player file too old (Terraria 1.2 or newer required)');
   if (version >= 135) {
     const meta = r.bytes(FILE_META_TOTAL);
     const dv = new DataView(meta.buffer, meta.byteOffset, meta.byteLength);
     const lo = dv.getBigUint64(0, true) & 0xFFFFFFFFFFFFFFn;   // 低 56 位(14×F)
-    if (lo !== META_MAGIC_LOW56) throw new Error('非 Re-Logic 角色档(魔数不符)');
+    if (lo !== META_MAGIC_LOW56) throw new Error('Not a Terraria player file (no Re-Logic header)');
   }
 
   const name = r.string();

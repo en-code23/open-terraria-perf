@@ -1013,6 +1013,12 @@ kvHas('sandboxworld.quicksave').catch((e) => {
   // ★BJ628 l10n 就绪门①（短预算 2.5s）：音频门/资源徽标文案已消费 Lang——弱网
   //  瞬断在此吸收；失败不阻断启动（资产预热期长,②号门在 showTitle 前兜底）
   await Lang.ensureReady(options.data.lang, 2500);
+  // Fork: Seitensprache = Spielsprache (sonst bietet der Browser „Chinesisch übersetzen“ an)
+  {
+    const setDocLang = () => { document.documentElement.lang = (options.data.lang || 'de-DE').split('-')[0]; };
+    setDocLang();
+    Lang.onChange(setDocLang);
+  }
   // ★mod 装载（2026-10-04,docs/mod-loader-design.md §4）：内容注册+id 分配必须在
   //   一切世界/UI 消费之前；贴图注入在 loadAssets 内 atlas 构造后（applyModAssets）。
   //   失败只告警不阻断启动（资源包同款"增强不是必需"哲学；零 mod=零副作用）
@@ -1133,7 +1139,9 @@ kvHas('sandboxworld.quicksave').catch((e) => {
     try { await primeBootAssets(30_000); } catch { /* 降级放行 */ }
     // ★幕不在此撤:继续盖住音频门之后的 loadAssets/过渡图缓存等待间隙
   }
-  if (!bypassBoot && shouldShowAudioGate() && (await audio.detectAutoplayBlocked())) {
+  // Fork: kein Kopfhörer-Fenster mehr — der Ton startet mit dem ersten Klick/Tipp
+  //  (AudioSystem.armUnlock lauscht bereits auf pointerdown/keydown/touchstart)
+  if (false as boolean && !bypassBoot && shouldShowAudioGate() && (await audio.detectAutoplayBlocked())) {
     await showAudioGate(() => audio.resumeNow());
   }
   // 素材装载与音频门并行（门期间后台预载，点击放行即有图可显）

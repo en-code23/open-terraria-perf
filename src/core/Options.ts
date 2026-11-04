@@ -254,6 +254,8 @@ export interface OptionsData {
   /** 智能光标触屏初值（用户定案 2026-08-28=开启）:isTouchDevice 会话进世界时
    *  赋给 smartCursor.wanted 初值;桌面路径恒 false 不消费。Settings 可改 */
   touchSmartCursorDefault: boolean;
+  /** Fork: Auto-Sprung auf Touch (wie die Mobil-App): gegen ≥2 Blöcke hohe Wand laufen → springt. Standard an. */
+  touchAutoJump: boolean;
   /** HUD 缩放档:'auto'=按视口判定 D0/T1(iPad)/T2(横屏)/T3(竖屏);t1-t3=手动钉档。
    *  消费:HudScale.ts→data-huds/--huds 与 mobileUiScale() 档位读数 */
   hudScaleMode: 'auto' | 't1' | 't2' | 't3';
@@ -314,6 +316,10 @@ export interface OptionsData {
    *  Game.render 每帧按本开关注入 renderer.fpsReadout）。设置行=Settings game 组
    *  渲染帧率上限行后（帧率族相邻） */
   fpsDisplay: boolean;
+  /** Fork: Vollbildkarte (Tab/M) zeigt die ganze Welt ohne Nebel (X-Ray). Standard an. */
+  mapXray: boolean;
+  /** Fork: einmalige Umstellung auf den klassischen NPC-Dialog ohne Porträt erledigt */
+  forkClassicDialog?: boolean;
   /** ★后台继续运行（2026-09-28 用户需求:后台挂机——切后台 rAF 停发=世界冻结的
    *  Web 缺口;原版无对应物=Web 便利档,缺省开）。消费=Game.onPumpMsg 泵门四条件
    *  之一（document.hidden ∧ 本开关 ∧ playWhenUnfocused ∧ !paused → fixedUpdate
@@ -385,7 +391,7 @@ export class OptionsStore {
     placementPreview: true,                 // Main.cs:1298
     highlightNewItems: true,                // ItemSlot.cs:31
     mouseShowBuildingGrid: false,           // Main.cs:257
-    dialoguePortraitMode: 'detailed',
+    dialoguePortraitMode: 'disabled',   // Fork: klassischer Dialog (wie 1.4.4/PC), Porträts in Einstellungen
     opaqueBoxBehindTooltips: true,          // Main.cs:249
     hoverControl: 'hold',                   // ★SW-FX14 Player.cs:357 缺省 Hold
     showBossBarHealthText: true,            // ★SW-FX14 BigProgressBarSystem.cs:76 缺省 true
@@ -408,6 +414,7 @@ export class OptionsStore {
     touchButtonSize: 1,
     touchLongPressMs: 380,                  // tooltip/拿起共用(World 触摸右键恒 400)
     touchSmartCursorDefault: true,          // SC 触屏默认开(用户定案)
+    touchAutoJump: true,                    // Fork: Auto-Sprung auf Touch
     hudScaleMode: 'auto',
     hudScaleFactor: 1,
     touchOpMode: 'auto',                    // 默认按设备
@@ -416,6 +423,7 @@ export class OptionsStore {
     craftingGridControl: 'modern',           // ★SW-FX41 缺省回切原版缺省 Modern(Player.cs:363;FX30 偏差备案清偿)
     inventoryLayout: 'vanilla',             // ★SW-FX39(2026-09-11)缺省转正(原版布局;旧自创退 ?invlayout=legacy 回退旗)
     fpsDisplay: false,                      // ★BJ305 帧率显示缺省关（用户明令新功能）
+    mapXray: true,                          // Fork: Vollbildkarte ohne Nebel
     backgroundRun: true,                    // ★后台继续运行缺省开（2026-09-28 用户需求后台挂机;与 playWhenUnfocused 组合门见 Game 泵域注）
   };
   loaded = false;
@@ -552,6 +560,7 @@ export class OptionsStore {
       this.data.touchLongPressMs = Math.min(700, Math.max(200, Math.round(this.data.touchLongPressMs)));
       if (typeof this.data.touchJoystickFloat !== 'boolean') this.data.touchJoystickFloat = true;
       if (typeof this.data.touchSmartCursorDefault !== 'boolean') this.data.touchSmartCursorDefault = true;
+      if (typeof this.data.touchAutoJump !== 'boolean') this.data.touchAutoJump = true;
       if (!(['auto', 't1', 't2', 't3'] as const).includes(this.data.hudScaleMode)) {
         this.data.hudScaleMode = 'auto';
       }
@@ -613,6 +622,9 @@ export class OptionsStore {
       }
       // ★BJ305 帧率显示：坏值回缺省「关」（布尔卫门,同 playWhenUnfocused 等家族判式）
       if (typeof this.data.fpsDisplay !== 'boolean') this.data.fpsDisplay = false;
+      if (typeof this.data.mapXray !== 'boolean') this.data.mapXray = true;
+      // Fork: bestehende Einstellungen einmalig auf den klassischen Dialog umstellen
+      if (this.data.forkClassicDialog !== true) { this.data.dialoguePortraitMode = 'disabled'; this.data.forkClassicDialog = true; }
       // ★后台继续运行（2026-09-28）：坏值回缺省「开」（布尔卫门同族）
       if (typeof this.data.backgroundRun !== 'boolean') this.data.backgroundRun = true;
       this.persistedLayout = this.data.inventoryLayout;

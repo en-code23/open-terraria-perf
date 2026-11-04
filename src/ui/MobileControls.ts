@@ -11,7 +11,8 @@
 //  - "使用"大钮实时显示当前手持物品 sprite(iconUrl 同源 dataURL),空手回退准星;
 //    智能光标开关在底部动作排,点亮态即智能光标开启(官方手游同形)。
 import type { Game } from '../core/Game';
-import { ITEM_DEFS } from '../data/items';
+import { ITEM_DEFS, ITEM_BY_KEY, VANILLA_ITEM_KEY_BY_ID } from '../data/items';
+import { TILE_DEFS } from '../data/tiles';
 import { itemFuncOfVid } from '../data/vanillaItemFunc';
 
 import { Lang } from '../i18n/Lang';
@@ -43,6 +44,8 @@ const CSS = `
 .sw-mobile { position:fixed; inset:0; pointer-events:none; z-index:150;
   font-family:inherit; user-select:none; -webkit-user-select:none; }
 .sw-mobile > * { pointer-events:auto; }
+/* Fork: bei offenem Inventar nur System-/Pause-Knöpfe */
+.sw-mobile.inv .sw-mjoy, .sw-mobile.inv .sw-mjump, .sw-mobile.inv .sw-matk, .sw-mobile.inv .sw-mpot { display:none; }
 /* ---- 官方手游皮肤基准(对齐 2026-08-29 用户高清参照):极淡深蓝圆盘+近无描边+
    白色像素剪影图标+大半透白 knob。官方盘面透明度 ~0.35,按压仅微增亮 ---- */
 .sw-mjoy, .sw-mjump, .sw-mbtn {
@@ -93,15 +96,38 @@ const CSS = `
 .sw-mjump { position:absolute; right:calc(142px + env(safe-area-inset-right)); bottom:calc(40px + env(safe-area-inset-bottom));
   width:64px; height:64px; display:flex; align-items:center; justify-content:center; }
 .sw-mpause { position:absolute; right:calc(34px + env(safe-area-inset-right)); bottom:calc(10px + env(safe-area-inset-bottom));
-  width:44px; height:44px; display:flex; align-items:center; justify-content:center; }
+  width:46px; height:46px; display:flex; align-items:center; justify-content:center; }
 /* ---- 右上系统组(横排,锚=minimap 左缘;网页版必需的窗口管理键) ----
    成员:背包/地图/智能光标开关(+条件:聊天/旅程)。SC 点亮=on 绿环 */
 .sw-msys { position:absolute; display:flex; gap:8px; align-items:center;
   right:210px; top:calc(58px + env(safe-area-inset-top)); }
-.sw-msys .sw-mbtn { position:relative; width:44px; height:44px; }
+.sw-msys .sw-mbtn { position:relative; width:42px; height:42px; }
+/* Fork: System-/Pause-Knöpfe = Original-Inventarslot (Inventory_Back) + Original-Icons */
+.sw-msys .sw-mbtn, .sw-mpause { border-radius:0; box-shadow:none; image-rendering:pixelated;
+  background:url(sprites/vanilla-ui/Inventory_Back.png) 0 0 / 100% 100% no-repeat;
+  display:flex; align-items:center; justify-content:center; }
+.sw-msys .sw-mbtn img.tex, .sw-mpause img.tex { width:64%; height:64%; object-fit:contain; opacity:1; }
+.sw-msys .sw-mbtn.on { box-shadow:none; background-image:url(sprites/vanilla-ui/Inventory_Back14.png); }
+.sw-msys .sw-mbtn.off { filter:none; opacity:var(--mbtn-alpha,0.82); }
+.sw-msys .sw-mbtn.sw-mact-chat, .sw-msys .sw-mbtn.sw-mact-journey { display:none; }
+.sw-mobile.net .sw-msys .sw-mbtn.sw-mact-chat, .sw-mobile.journey .sw-msys .sw-mbtn.sw-mact-journey { display:flex; }
 .sw-mact-chat, .sw-mact-journey { display:none; }
 .sw-mobile.net   .sw-mact-chat     { display:flex; }
 .sw-mobile.journey .sw-mact-journey { display:flex; }
+/* Fork: Mobil-App-Layout — Inventar-Raster unten links, Zahnrad unten rechts (dunkle Quadrate) */
+.sw-minv, .sw-mobile .sw-mpause { position:absolute; width:46px; height:46px; border-radius:8px;
+  background:rgba(20,28,64,0.62); box-shadow:inset 0 0 0 2px rgba(190,208,255,0.35);
+  display:flex; align-items:center; justify-content:center; }
+.sw-minv { left:calc(10px + env(safe-area-inset-left)); bottom:calc(10px + env(safe-area-inset-bottom)); }
+.sw-minv img { width:60%; height:60%; image-rendering:pixelated; }
+.sw-minv img, .sw-mobile .sw-mpause img { filter:sepia(1) saturate(4) hue-rotate(5deg) brightness(1.15); }
+.sw-mobile .sw-mpause { right:calc(10px + env(safe-area-inset-right)); bottom:calc(10px + env(safe-area-inset-bottom)); }
+.sw-mobile .sw-mpause img { width:60%; height:60%; image-rendering:pixelated; }
+.sw-mobile.inv .sw-minv { box-shadow:inset 0 0 0 2.5px rgba(255,231,69,0.9); }
+.sw-matk .face { width:40%; height:40%; }
+/* Fork: Anordnung wie die App — „+“-Stick links neben dem Zahnrad, Sprung rechts darüber */
+.sw-mobile .sw-matk { right:calc(74px + env(safe-area-inset-right)); bottom:calc(28px + env(safe-area-inset-bottom)); }
+.sw-mobile .sw-mjump { right:calc(12px + env(safe-area-inset-right)); bottom:calc(150px + env(safe-area-inset-bottom)); }
 /* ---- 全屏/横屏兜底钮(最右上,官方同位) ---- */
 .sw-mfs { position:absolute; right:calc(8px + env(safe-area-inset-right)); top:calc(6px + env(safe-area-inset-top));
   width:38px; height:30px; border-radius:7px; font-size:15px;
@@ -150,22 +176,80 @@ function art2svg(rows: string[]): string {
 const PIXEL_ART: Record<string, string[]> = {
   // —— 操控三枚(代理 A 终稿;jump/pause 主控钮 + aim-joystick fallback face 不再使用旧草稿)——
   // 跳跃:粗实心上箭头(三角头双行钝肩+直杆,头基12px 杆6px)
+  // Fork: Springen = Doppelpfeil nach oben (wie die Mobil-App)
   jump: [
     '................',
     '.......XX.......',
     '......XXXX......',
     '.....XXXXXX.....',
+    '....XXX..XXX....',
+    '...XXX....XXX...',
+    '..XXX......XXX..',
+    '.......XX.......',
+    '......XXXX......',
+    '.....XXXXXX.....',
+    '....XXX..XXX....',
+    '...XXX....XXX...',
+    '..XXX......XXX..',
+    '................',
+    '................',
+    '................',
+  ],
+  // Fork: Benutzen = Plus (wie die Mobil-App)
+  plus: [
+    '................',
+    '................',
+    '......XXXX......',
+    '......XXXX......',
+    '......XXXX......',
+    '......XXXX......',
+    '..XXXXXXXXXXXX..',
+    '..XXXXXXXXXXXX..',
+    '..XXXXXXXXXXXX..',
+    '..XXXXXXXXXXXX..',
+    '......XXXX......',
+    '......XXXX......',
+    '......XXXX......',
+    '......XXXX......',
+    '................',
+    '................',
+  ],
+  // Fork: Inventar = 3×3-Raster (wie die Mobil-App)
+  grid: [
+    '................',
+    '.XXXX.XXXX.XXXX.',
+    '.XooX.XooX.XooX.',
+    '.XooX.XooX.XooX.',
+    '.XXXX.XXXX.XXXX.',
+    '................',
+    '.XXXX.XXXX.XXXX.',
+    '.XooX.XooX.XooX.',
+    '.XooX.XooX.XooX.',
+    '.XXXX.XXXX.XXXX.',
+    '................',
+    '.XXXX.XXXX.XXXX.',
+    '.XooX.XooX.XooX.',
+    '.XooX.XooX.XooX.',
+    '.XXXX.XXXX.XXXX.',
+    '................',
+  ],
+  // Fork: Einstellungen = Zahnrad
+  gear: [
+    '................',
+    '.......XX.......',
+    '...XX.XXXX.XX...',
+    '...XXXXXXXXXX...',
+    '....XXXXXXXX....',
+    '..XXXXX..XXXXX..',
+    '.XXXXX....XXXXX.',
+    '.XXXX......XXXX.',
+    '.XXXX......XXXX.',
+    '.XXXXX....XXXXX.',
+    '..XXXXX..XXXXX..',
     '....XXXXXXXX....',
     '...XXXXXXXXXX...',
-    '..XXXXXXXXXXXX..',
-    '..XXXXXXXXXXXX..',
-    '.....XXXXXX.....',
-    '.....XXXXXX.....',
-    '.....XXXXXX.....',
-    '.....XXXXXX.....',
-    '.....XXXXXX.....',
-    '.....XXXXXX.....',
-    '................',
+    '...XX.XXXX.XX...',
+    '.......XX.......',
     '................',
   ],
   // 暂停:双竖条(4px 杠宽=4px 间隙,o 圆角过渡)
@@ -358,6 +442,14 @@ export class MobileControls {
   private held = { left: false, right: false, up: false, down: false };
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private rotListener: (() => void) | null = null;
+  /** Fork: Inventar-Knopf (Original-Truhen-Icon, sobald der Item-Atlas geladen ist) */
+  private invBtn: HTMLElement | null = null;
+  private invIconSet = false;
+  /** Fork: Auto-Sprung */
+  private autoJumpTimer: ReturnType<typeof setInterval> | null = null;
+  private autoJumpHold = 0;      // verbleibende Ticks, die "Springen" gehalten wird
+  private jumpBtnHeld = false;   // Spieler hält den Sprungknopf selbst
+  private invTimer: ReturnType<typeof setInterval> | null = null;
   private optListener: ((d: typeof options.data) => void) | null = null;
   /** 底部动作排各钮(use/smart/potion) */
   private useBtn: HTMLElement | null = null;
@@ -377,6 +469,7 @@ export class MobileControls {
     this.root = document.createElement('div');
     this.root.className = 'sw-mobile';
     this.applySkinVars();
+    this.autoJumpTimer = setInterval(() => this.autoJumpTick(), 50);
     this.optListener = () => this.applySkinVars();
     options.onChange(this.optListener);
     this.buildJoystick();
@@ -392,6 +485,15 @@ export class MobileControls {
     parent.appendChild(this.root);
     // 状态刷新(使用钮物品面/药水可用/SC 态/条件项/系统列锚):1s 节流
     this.refreshTimer = setInterval(() => this.refresh(), 1000);
+    // Fork: offenes Inventar → Bewegungs-/Aktionsknöpfe ausblenden (lagen über
+    // Ausrüstungs- und Herstellen-Spalte). Schließen über den Inventar-Knopf oben.
+    this.invTimer = setInterval(() => {
+      const open = !!(window as unknown as { __swUI?: { inventoryOpen?: boolean } }).__swUI?.inventoryOpen;
+      if (open === this.root.classList.contains('inv')) return;
+      this.root.classList.toggle('inv', open);
+      // ausgeblendete Knöpfe bekommen kein touchend mehr → gehaltene Eingaben lösen
+      if (open) this.game.input.releaseAllVirtual();
+    }, 120);
     // 横竖屏变化时也刷
     this.rotListener = () => this.refresh();
     window.addEventListener('orientationchange', this.rotListener);
@@ -399,6 +501,8 @@ export class MobileControls {
 
   destroy(): void {
     if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.invTimer) clearInterval(this.invTimer);
+    if (this.autoJumpTimer) clearInterval(this.autoJumpTimer);
     if (this.rotListener) window.removeEventListener('orientationchange', this.rotListener);
     if (this.optListener) options.removeListener(this.optListener);
     // H5 护栏:清全部虚拟电平(touchKeys/virtualActions)——重进世界残留虚拟键会
@@ -414,6 +518,24 @@ export class MobileControls {
   }
 
   // ---- 构件 ----
+  /** Fork: Original-Textur als Icon (statt Pixel-Skizze) */
+  private setTex(btn: HTMLElement, url: string): void {
+    btn.innerHTML = '';
+    const img = document.createElement('img');
+    img.className = 'tex';
+    img.src = url;
+    img.alt = '';
+    img.draggable = false;
+    btn.appendChild(img);
+  }
+
+  /** Icon eines Original-Items (vid) — leer, solange der Item-Atlas noch lädt */
+  private itemTex(vid: number): string {
+    const key = VANILLA_ITEM_KEY_BY_ID[vid];
+    const id = key ? ITEM_BY_KEY[key] : undefined;
+    return id != null ? iconUrl(this.game, id) : '';
+  }
+
   private setIcon(btn: HTMLElement, name: string): void {
     btn.innerHTML = '';
     const img = document.createElement('img');
@@ -544,8 +666,8 @@ export class MobileControls {
     b.className = 'sw-mjump';
     this.setIcon(b, 'jump');
     this.bindBtn(b,
-      () => this.game.input.setVirtualAction('Jump', true),
-      () => this.game.input.setVirtualAction('Jump', false));
+      () => { this.jumpBtnHeld = true; this.autoJumpHold = 0; this.game.input.setVirtualAction('Jump', true); },
+      () => { this.jumpBtnHeld = false; this.game.input.setVirtualAction('Jump', false); });
     this.root.appendChild(b);
   }
 
@@ -642,12 +764,9 @@ export class MobileControls {
     b.innerHTML = '';
     let face = document.createElement('img');
     face.className = 'face';
-    if (itemId >= 0) {
-      try { face.src = iconUrl(this.game, itemId); }
-      catch { face = this.faceIcon('ring'); }
-    } else {
-      face = this.faceIcon('ring');   // 空手=靶标环(与系统组狙击镜 cross 区分)
-    }
+    // Fork: wie die Mobil-App immer ein „+“ (das gehaltene Item zeigt die Hotbar)
+    void iconUrl;
+    face = this.faceIcon('plus');
     face.alt = '';
     b.appendChild(face);
     if (knob) b.appendChild(knob);
@@ -680,28 +799,33 @@ export class MobileControls {
       col.appendChild(b);
       return b;
     };
-    mk('inventory', () => this.game.input.tapVirtual('Inventory', { virtualIntent: 'inventory' }));
+    this.invBtn = mk('grid', () => this.game.input.tapVirtual('Inventory', { virtualIntent: 'inventory' }), 'sw-minv');
+    this.invIconSet = true;   // Fork: Raster-Icon wie die Mobil-App (statt Truhe)
+    this.root.appendChild(this.invBtn);   // Fork: unten links statt oben
     // ★SW-FX16 2026-09-10 消费面收口：地图/旅程钮改发【当前绑定首码】（bindsOf 现读
     // 活绑表,重绑即时跟随）——旧码面 tapVirtual('KeyM'/'KeyC') 在用户改绑/解绑
     // MapFull/ToggleCreativeMenu 后整钮失效（消费端 isBound 查表而钮发死码）。
     // 解绑态（空表）不派发 = 钮无功能,与原版解绑一致。聊天钮 'Enter' 保留字面：
     // 原版聊天键即硬编码 Enter（KnownTriggers 59 项无 Chat trigger,PlayerInput.cs:
     // 229-237）,不属可重绑面。
-    mk('map', () => {
+    const mapBtn = mk('map', () => {
       const c = bindsOf('MapFull')[0];
       if (c) this.game.input.tapVirtual(c);
     });
+    this.setTex(mapBtn, 'sprites/vanilla/Map_0.png');
     // 智能光标开关:tap=直翻(toggle 语义);点亮绿环=.on(refresh 维护)
     const sc = mk('cross', () => {
       this.game.smartCursor.wanted = !this.game.smartCursor.wanted;
       this.refresh();
     }, 'sw-mact-smart');
+    this.setTex(sc, 'sprites/vanilla-ui/UI_Cursor_2.png');
     this.smartBtn = sc;
     mk('chat', () => this.game.input.tapVirtual('Enter'), 'sw-mact-chat');
-    mk('journey', () => {
+    const jBtn = mk('journey', () => {
       const c = bindsOf('ToggleCreativeMenu')[0];
       if (c) this.game.input.tapVirtual(c);
     }, 'sw-mact-journey');
+    this.setTex(jBtn, 'sprites/vanilla-ui/UI_Creative_Journey_Toggle.png');
     this.root.appendChild(col);
   }
 
@@ -711,7 +835,7 @@ export class MobileControls {
   private buildPauseBtn(): void {
     const b = document.createElement('div');
     b.className = 'sw-mbtn sw-mpause';
-    this.setIcon(b, 'pause');
+    this.setIcon(b, 'gear');   // Fork: Zahnrad wie die Mobil-App (öffnet Pause/Einstellungen)
     b.addEventListener('touchstart', (e) => {
       e.preventDefault(); e.stopPropagation();
       this.game.input.tapVirtual('Inventory', { virtualIntent: 'pause' });
@@ -734,8 +858,45 @@ export class MobileControls {
 
   /** 状态刷新(1s 节流):使用钮物品面/药水可用亮起/SC 点亮/抓钩·宠物按装备显隐/
    *  条件项(journey/net)与系统列锚(minimap 底缘下沉) */
+  /** Fork: Auto-Sprung wie in der Mobil-App — läuft der Spieler per Joystick gegen eine
+   *  Wand, die höher als eine Stufe ist (Stufen von 1 Block nimmt das Spiel selbst),
+   *  wird kurz "Springen" gehalten (≈ volle Sprunghöhe). */
+  private autoJumpTick(): void {
+    const inp = this.game.input;
+    if (this.autoJumpHold > 0) {
+      if (--this.autoJumpHold === 0 && !this.jumpBtnHeld) inp.setVirtualAction('Jump', false);
+      return;
+    }
+    if (!options.data.touchAutoJump || this.jumpBtnHeld || this.root.classList.contains('inv')) return;
+    const dir = this.held.right ? 1 : this.held.left ? -1 : 0;
+    const p = this.game.player;
+    const w = this.game.world;
+    if (!dir || !p || !w || !p.onGround || p.dead) return;
+    const st = w.store;
+    const solid = (x: number, y: number): boolean => {
+      if (x < 0 || y < 0 || x >= st.w || y >= st.h || !st.hasTile(x, y)) return false;
+      return !!TILE_DEFS[st.type[st.idx(x, y)]]?.solid;
+    };
+    const ahead = Math.floor((dir > 0 ? p.x + p.w + 3 : p.x - 3) / 16);
+    const foot = Math.floor((p.y + p.h - 1) / 16);
+    // Wand vor den Füßen UND einen Block darüber (= mehr als eine Stufe), Kopf frei
+    if (solid(ahead, foot) && solid(ahead, foot - 1) && !solid(Math.floor(p.cx / 16), Math.floor(p.y / 16) - 1)) {
+      inp.setVirtualAction('Jump', true);
+      this.autoJumpHold = 6;   // 300 ms halten
+    }
+  }
+
+  private setInvIcon(): void {
+    if (this.invIconSet || !this.invBtn) return;
+    const url = this.itemTex(48);   // Holztruhe
+    if (!url) return;
+    this.setTex(this.invBtn, url);
+    this.invIconSet = true;
+  }
+
   private refresh(): void {
     const g = this.game;
+    this.setInvIcon();
     // 使用钮面=当前手持物品(官方手游同形;拾取切换后 ≤1s 跟手)。
     // ★SW-RB4a 2026-09-06：经 heldItem() 取手持——光标持物伪选中（SW-AZ1 镜像槽 58）
     // 时使用链用光标物,使用钮面须同相;曾直读 slots[selected]=分裂面
@@ -767,7 +928,10 @@ export class MobileControls {
     const sys = this.root.querySelector('.sw-msys') as HTMLElement | null;
     if (sys) {
       const mr = (g.renderer as unknown as { minimapRect?: { x: number; y: number; w: number; h: number } }).minimapRect;
-      if (mr && mr.w > 0) sys.style.right = `${Math.max(4, window.innerWidth - mr.x - 10)}px`;
+      if (mr && mr.w > 0) {
+        sys.style.right = `${Math.max(4, window.innerWidth - mr.x + 6)}px`;
+        sys.style.top = `${Math.round(mr.y + 4)}px`;   // Fork: unter den Herzen, bündig mit der Minikarte
+      }
     }
   }
 }

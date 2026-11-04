@@ -141,7 +141,7 @@ describe('M14 IngameOptions 杂项默认值（原版 1:1）', () => {
     expect(d.placementPreview).toBe(true);                     // Main.cs:1298
     expect(d.highlightNewItems).toBe(true);                    // ItemSlot.cs:31
     expect(d.mouseShowBuildingGrid).toBe(false);               // Main.cs:257
-    expect(d.dialoguePortraitMode).toBe('detailed');
+    expect(d.dialoguePortraitMode).toBe('disabled');   // Fork: klassischer Dialog als Standard (Original: Detailed)
     expect(d.opaqueBoxBehindTooltips).toBe(true);              // Main.cs:249
     expect(d.autoSave).toBe(true);                             // Main.cs:1196
     expect(d.autoSaveIntervalMin).toBe(10);                    // 原版 600000ms 恒值

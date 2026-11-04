@@ -1,0 +1,10 @@
+{
+  "Settings.MapXray": {
+    "en": "Map: show everything (X-ray)",
+    "de": "Karte: alles zeigen (X-Ray)"
+  },
+  "Settings.TouchAutoJump": {
+    "en": "Auto jump",
+    "de": "Automatisch springen"
+  }
+}

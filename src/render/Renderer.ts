@@ -29254,6 +29254,8 @@ export class Renderer {
    *  复用；silBakes/silHits=头像剪影烘焙/命中;stripBakes/stripHits=染发头带合成/
    *  命中。探针/诊断消费（fogIncrUpdates 同款常驻计数惯例） */
   mmThrottle = { hudRuns: 0, hudHits: 0, silBakes: 0, silHits: 0, stripBakes: 0, stripHits: 0 };
+  /** Fork: zuletzt gezeichneter X-Ray-Zustand der Minikarte */
+  private _mmXray = false;
   private mmHudBlit(world: World, sx: number, sy: number, viewTiles: number): HTMLCanvasElement | null {
     const mm = this.minimap;
     if (!mm?.pix || !mm.p32) return null;
@@ -29296,6 +29298,8 @@ export class Renderer {
     //  （fogBufSerial:ensureFogData 实写才 +1,带重建期逐帧升=重建窗零陈旧）。
     //  头像层不在本画布（NPC/玩家移动由 drawMapHeads 逐帧位画,不经此缓存）——
     //  minimap 开合（mapStyle 门）在调用点上游,重开即再对键。
+    const xray = options.data.mapXray;   // Fork: X-Ray → auch die Minikarte ohne Nebel
+    if (xray !== this._mmXray) { this._mmXray = xray; this._mmWinSerial++; }   // Umschalten → neu zeichnen
     const sig = mmHudSigKey(mm.uid, sx, sy, viewTiles, sizeI, this._mmWinSerial,
       this.fogP32 ? this.fogBufSerial : -1);
     if (sig === this._mmHudSig) { this.mmThrottle.hudHits++; return this._mmHudCanvas; }
@@ -29303,7 +29307,7 @@ export class Renderer {
     this.mmThrottle.hudRuns++;
     const dst = new Uint32Array(this._mmHudImg!.data.buffer);
     const src = mm.p32;
-    const fog = this.fogP32;               // 迷雾 CPU 缓冲(可能 null=无探索数据)
+    const fog = xray ? null : this.fogP32; // 迷雾 CPU 缓冲(可能 null=无探索数据)
     const fogW = this.fogW;
     const FOG = 0xff080505;                // 小端 ABGR (5,5,8,255)
     for (let y = 0; y < sizeI; y++) {
@@ -29341,7 +29345,8 @@ export class Renderer {
       }
     // 移动端整体缩小（右锚缩放变换：小地图+框+按钮+时间文字同尺度；
     // 桌面 uiS=1 → 与原实现逐像素一致）
-    const uiS = mobileUiScale();
+    // Fork: Touch-Minikarte kleiner (die Mobil-App zeigt sie nur klein/zuklappbar)
+    const uiS = mobileUiScale() * (hudTier() === 'd0' ? 1 : 0.72);
     ctx.save();
     if (uiS !== 1) {
       ctx.translate(ctx.canvas.width, 0);
@@ -30287,7 +30292,8 @@ export class Renderer {
         }
         this.minimap.flushedPixelRects.length = 0;
         // 迷雾:getFogCanvas 每帧推进分带重建(2D/GL 共用),纹理按版本+行号重传
-        const fogImg = this.ensureFogData(world);
+        // Fork: X-Ray-Option → Vollbildkarte ohne Nebel
+        const fogImg = options.data.mapXray ? null : this.ensureFogData(world);
         if (fogImg && fogImg.width > 0) {
           // ★稳定键+行带增量(曾 version:row 换键:重建一步=一张新 20MB 纹理,
           // 探索期持续换血把字节预算烧穿)。首载整幅,之后只补重建过的行带
@@ -30376,8 +30382,8 @@ export class Renderer {
         ctx.imageSmoothingEnabled = false;
       }
       // 迷雾(2D 回退):同款临时画布 + 行带增量
-      this.fm2dFogEnsure(world);
-      if (this._fm2dFog) {
+      const fog2d = options.data.mapXray ? null : this.fm2dFogEnsure(world);
+      if (fog2d && this._fm2dFog) {
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(this._fm2dFog, cx0, cy0, this._fm2dFog.width * 2 * fm.zoom, this._fm2dFog.height * 2 * fm.zoom);
       }
@@ -30439,7 +30445,7 @@ export class Renderer {
       const tx = Math.floor((mouseX - cx0) / fm.zoom);
       const ty = Math.floor((mouseY - cy0) / fm.zoom);
       if (tx >= 0 && ty >= 0 && tx < world.w && ty < world.h
-        && (!world.explored || world.explored[ty * world.w + tx])) {
+        && (!world.explored || options.data.mapXray || world.explored[ty * world.w + tx])) {
         const st = world.store;
         const i = st.idx(tx, ty);
         if (st.flags[i]) {
@@ -30566,7 +30572,7 @@ export class Renderer {
     const num = -(cam.x / TILE) * s + viewW / 2 + 10 * s;
     const num2 = -(cam.y / TILE) * s + viewH / 2 + 10 * s;
     const map = this.fm2dMapEnsure();
-    const fog = this.fm2dFogEnsure(world);
+    const fog = options.data.mapXray ? null : this.fm2dFogEnsure(world);
     ctx.save();
     ctx.globalAlpha = this.mapOverlayAlpha;
     if (map) {

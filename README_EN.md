@@ -5,7 +5,14 @@
 > - Behoben: Freeze ca. 2 s nach Weltbeitritt (Endlosschleife Minecart-Schienen ↔ Stützprüfung; Stack-Overflow bei langen Einsturzketten).
 > - Weltgenerierung ca. 2× schneller (4200×1200: 35,6 s → 17,3 s), bitgenau identische Welten (per Hash über 5 Seeds verifiziert).
 > - Hauptmenü wie im Original (Terraria-Schrift, Reihenfolge, Workshop/Credits). Die Schrift liest `npm i --no-save xnb@1.3.0-a && node scripts/extract-local-fonts.mjs` aus **deiner eigenen** Steam-Installation nach `public/sprites/local/` (wird nicht committet; ohne sie bleibt die Pixelschrift).
+> - **Mac-App herunterladen:** [Open-Terraria-mac.zip](https://github.com/en-code23/open-terraria-perf/releases/latest/download/Open-Terraria-mac.zip) (Releases dieses Repos). Entpacken, `Open-Terraria.app` in „Programme“ ziehen, beim ersten Start **Rechtsklick → Öffnen** (nicht von Apple signiert). Braucht [Node.js](https://nodejs.org) (LTS); Google Chrome empfohlen (eigenes Vollbild-Fenster). Selbst bauen: `sh scripts/make-mac-release.sh` → `build/release/Open-Terraria-mac.zip`.
 > - Mac-App: `sh scripts/make-mac-app.sh` baut `build/Open-Terraria.app` (Doppelklick = Server + Vollbild-Fenster). Debug-Tasten F3–F10 nur mit `?dev=1`. Deutsche Übersetzung der projekteigenen Texte: `node scripts/apply-fork-l10n.mjs`.
+> - **iPad/Handy:** `npm run lan` baut das Spiel und startet es im WLAN (Adresse wird angezeigt, in Safari öffnen, „Zum Home-Bildschirm“ = Vollbild). Touch-Steuerung mit Original-Icons, Auto-Sprung, größeren Knöpfen.
+> - **LAN-Welten (echter Terraria-Server):** Mehrspieler → LAN-Welten: neue Welt, eigene Browser-Welt oder gespeicherte Welt hosten; der Helfer (`scripts/lan-host.mjs`, startet mit `npm run lan` und der Mac-App) nutzt `TerrariaServer` aus deiner Steam-Installation. Auch das echte Terraria am PC kann über „Über IP beitreten“ mitspielen. Welten lassen sich zurück in den Browser übernehmen.
+> - **Karte:** Tab-/Minikarte und Vollbildkarte (M) zeigen standardmäßig die ganze Welt (X-Ray, abschaltbar unter Einstellungen → Spiel).
+> - **Spieler & Welten aus dem echten Terraria:** Spieler-/Weltauswahl → Importieren listet die Spielstände deiner Terraria-Installation (lokal, Steam Cloud, tModLoader; über `scripts/terraria-saves.mjs` im Vite-Server). Welten ab Terraria 1.3, Spieler ab 1.2 bis 1.4.5.8.
+> - **Mobil-App-Look (Touch):** Hotbar 2×5 links, kleine Minikarte, Doppelpfeil-Sprung, „+“-Stick, Inventar-Raster unten links, Zahnrad unten rechts; NPC-Dialog klassisch (ohne Porträt, in den Einstellungen umschaltbar); App-Icon im Stil der App-Store-Version.
+> - **Ressourcenpakete:** echte Terraria-Pakete (zip mit `pack.json` + `Content/`) über Workshop → Ressourcenpakete. tModLoader-Mods (C#/.NET) laufen in diesem Browser-Nachbau nicht.
 > - Alle Rechte an Terraria-Assets liegen bei Re-Logic, siehe [ASSETS.md](ASSETS.md).
 
 **[简体中文](README.md) | [English](README_EN.md)**

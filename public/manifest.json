@@ -1,8 +1,8 @@
 {
-  "name": "SandboxWorld",
-  "short_name": "SandboxWorld",
-  "description": "泰拉瑞亚风格沙盒世界(SandboxWorld)",
-  "lang": "zh-CN",
+  "name": "Open-Terraria",
+  "short_name": "Terraria",
+  "description": "Terraria im Browser (inoffiziell, kein Original)",
+  "lang": "de",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",

@@ -146,8 +146,23 @@ export default defineConfig({
     hmr: NO_HMR ? false : undefined,
   },
   cacheDir: process.env.SW_CACHE ?? 'node_modules/.vite',
-  plugins: [vanillaAtlasAuto(), l10nAuditAuto(), atlasLintAuto()],
+  plugins: [vanillaAtlasAuto(), l10nAuditAuto(), atlasLintAuto(), terrariaSavesBridge()],
 });
+
+/** Fork: „Aus Terraria importieren“ — liest Spieler/Welten des echten Terraria
+ *  (lokal, tModLoader, Steam Cloud) über /__terraria/* (scripts/terraria-saves.mjs).
+ *  dev (npm run dev, Mac-App) und preview (npm run lan); nur lesend. */
+function terrariaSavesBridge(): Plugin {
+  const use = async (mw: { use(fn: unknown): void }) => {
+    const { terrariaSavesMiddleware } = await import('./scripts/terraria-saves.mjs');
+    mw.use(terrariaSavesMiddleware);
+  };
+  return {
+    name: 'terraria-saves-bridge',
+    configureServer(server) { return use(server.middlewares); },
+    configurePreviewServer(server) { return use(server.middlewares); },
+  };
+}
 
 /** 素材自洽 lint(tools/atlas-lint.mjs 的 vite 钩子;照搬 l10nAuditAuto 双消费:
  *  dev 警告 / build 阻断;vitest 不走钩子,由 tests/atlas-lint.test.ts 锁定)。 */

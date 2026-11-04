@@ -84,7 +84,7 @@ describe('AES-128-ECB 纯 JS 解密', () => {
     }
   });
   it('密文长度非 16 倍数抛错', () => {
-    expect(() => aes128EcbDecrypt(new Uint8Array(15))).toThrow(/对齐/);
+    expect(() => aes128EcbDecrypt(new Uint8Array(15))).toThrow(/length/);
   });
 });
 
@@ -293,11 +293,11 @@ describe('parsePlr 字段流(生成器闭环)', () => {
     expect(p.playerState.buffs).toEqual([[5, 1]]);
   });
 
-  it('过新版本拒读(>325)', () => {
+  it('过新版本拒读(>326)', () => {
     const w = new Writer();
     w.i32(400).str('x');
     const enc = encrypt(w.build());
-    expect(() => parsePlr(enc)).toThrow(/更新/);
+    expect(() => parsePlr(enc)).toThrow(/newer/);
   });
 
   it('魔数不符拒读(非 Re-Logic 档)', () => {
@@ -387,6 +387,20 @@ describe('exportPlr 导出往返', () => {
     const back = Buffer.concat([d.update(Buffer.from(bytes)), d.final()]);
     expect(back[0]).toBe(325 & 0xff);
     expect(back.readUInt32LE(0)).toBe(325);
+  });
+
+  it('Fork: 1.4.5.8-Spielerdatei (Version 326) wird gelesen', async () => {
+    const { exportPlr } = await import('../src/save/PlrImport');
+    const { createDecipheriv } = await import('node:crypto');
+    const bytes = exportPlr(mkAppearance(), mkState());
+    const d = createDecipheriv('aes-128-ecb', KEY, null);
+    d.setAutoPadding(false);
+    const plain = Buffer.concat([d.update(Buffer.from(bytes)), d.final()]);
+    plain.writeUInt32LE(326, 0);   // wie 1.4.5.8 schreibt
+    const p = parsePlr(encrypt(plain));
+    expect(p.version).toBe(326);
+    expect(p.appearance.name).toBe('导出测试');
+    expect(p.playerState.inventory?.[0]).toEqual({ id: 50, stack: 42, prefix: 3, favorited: true });
   });
 
   it('导出→导入→再导出:字节稳定(幂等)', async () => {

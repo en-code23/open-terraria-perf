@@ -105,7 +105,8 @@ export function showSplash(opts: {
   const ensureFlowerSrc = () => {
     if (!flowerSrcSet) {
       flowerSrcSet = true;
-      flowerImg.src = 'sprites/vanilla-ui/UI_Sunflower_Loading.png'; // UI/ 子目录展平在 vanilla-ui/
+      // Fork: keine Sonnenblume beim Start (Wartezeit bleibt einfach schwarz)
+      if (false as boolean) flowerImg.src = 'sprites/vanilla-ui/UI_Sunflower_Loading.png'; // UI/ 子目录展平在 vanilla-ui/
     }
   };
 

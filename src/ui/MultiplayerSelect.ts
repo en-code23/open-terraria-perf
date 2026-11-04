@@ -4,6 +4,7 @@
 // 其他玩家：房间列表点击加入，或输房间码进非公开房。
 // 文案 = Mods.SandboxWorld.MP.*（自制联机 UI,原版无对应键）
 import { Lang } from '../i18n/Lang';
+import { ensureVanillaKit } from './vanillaKit';
 const T = (k: string, ...a: (string | number)[]) => Lang.text(`Mods.SandboxWorld.MP.${k}`, ...a);
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -29,6 +30,10 @@ export interface MultiplayerSelectCallbacks {
    *  (CharSelectPanel 覆盖层,多人面板保持挂载)——选完 then() 继续动作 */
   onNeedCharacter: (then: () => void) => void;
   onBack: () => void;
+  /** Fork: Browser-Welt (Save-JSON) → .wld-Bytes für den echten Terraria-Server */
+  exportWld?: (worldJson: string) => Promise<Uint8Array>;
+  /** Fork: .wld vom LAN-Rechner zurück in die Browser-Weltenliste übernehmen */
+  importWld?: (bytes: Uint8Array, name: string) => Promise<void>;
 }
 
 export interface RoomListItem {
@@ -50,6 +55,7 @@ function serverBase(addr: string): { httpBase: string; wsBase: string } | null {
 
 export class MultiplayerSelect {
   root: HTMLElement;
+  private lan: LanSection;
   private roomList = el('div');
   private codeInput: HTMLInputElement;
   private vanInput: HTMLInputElement;
@@ -67,10 +73,29 @@ export class MultiplayerSelect {
   };
 
   constructor(private cb: MultiplayerSelectCallbacks) {
-    this.root = el('div', 'sw-panel');
-    this.root.style.cssText =
-      'position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); max-width:520px; width:min(520px,96vw); z-index:20; cursor:auto; max-height:92vh; overflow-y:auto;';
-    this.root.appendChild(el('h2', undefined, T('Title')));
+    ensureVanillaKit();
+    ensureMpStyle();
+    this.root = el('div', 'sw-mp');
+    const title = el('div', 'sw-mp-title sw-vbtn', L().title);
+    this.root.appendChild(title);
+    const body = el('div', 'sw-mp-body sw-vpanel');
+    this.root.appendChild(body);
+    this.lan = new LanSection(body, cb);
+    // Alter Projekt-Server (Raumcode): braucht den nicht mitgelieferten SandboxWorld-Server → eingeklappt
+    const adv = el('details', 'sw-mp-adv');
+    adv.appendChild(el('summary', undefined, L().advanced));
+    body.appendChild(adv);
+    const legacy = el('div');
+    adv.appendChild(legacy);
+    const footer = el('div', 'sw-mp-footer');
+    const backBtn = el('button', 'sw-vbtn', Lang.text('UI.Back')) as HTMLButtonElement;
+    backBtn.onclick = () => { this.lan.destroy(); cb.onBack(); };
+    const refBtn = el('button', 'sw-vbtn', L().refresh) as HTMLButtonElement;
+    refBtn.onclick = () => void this.lan.refresh();
+    footer.append(backBtn, refBtn);
+    this.root.appendChild(footer);
+    const realRoot = this.root;
+    this.root = legacy;   // der alte Aufbau unten hängt sich in den eingeklappten Bereich
 
     // ---- 角色选择不再自造列表(2026-08-25 用户要求):加入/创建时经
     //      onNeedCharacter 跳转既有单人角色列表(CharSelectPanel) ----
@@ -181,12 +206,8 @@ export class MultiplayerSelect {
     this.createdInfo.style.cssText = 'min-height:18px; font-size:13px; color:#8b98bd; word-break:break-all;';
     this.root.appendChild(this.createdInfo);
 
-    const back = el('button', 'sw-btn', T('Back')) as HTMLButtonElement;
-    back.style.marginTop = '14px';
-    back.onclick = cb.onBack;
-    this.root.appendChild(back);
-
-    void this.refreshRooms();
+    this.root = realRoot;
+    adv.addEventListener('toggle', () => { if (adv.open) void this.refreshRooms(); });
   }
 
   // ================= 加入 =================
@@ -290,6 +311,351 @@ export class MultiplayerSelect {
       this.status(this.createdInfo, T('CreateFailDetail', (e as Error).message), '#ff6b6b');
     } finally {
       btn.disabled = false;
+    }
+  }
+}
+
+// ====================================================================
+// Fork: LAN-Welten über den ECHTEN Terraria-Server (scripts/lan-host.mjs)
+// --------------------------------------------------------------------
+// Der Rechner, der das Spiel ausliefert (Mac mit Steam-Terraria), startet
+// TerrariaServer-Prozesse; Browser (auch iPad/Handy) treten über die
+// WebSocket-Brücke desselben Helfers bei. Auch das echte Terraria am PC kann
+// diesen Servern über "Über IP beitreten" beitreten.
+// ====================================================================
+
+const MP_TEXT = {
+  de: {
+    title: 'Mehrspieler',
+    lan: 'LAN-Welten',
+    helperOk: (h: string) => `LAN-Rechner: ${h}`,
+    helperMissing: 'LAN-Helfer nicht erreichbar. Am Mac starten: npm run lan',
+    noTerraria: 'Terraria-Server nicht gefunden – Hosten nicht möglich (Beitreten geht).',
+    noServers: 'Keine Welt wird gerade gehostet.',
+    players: (n: number) => (n === 1 ? '1 Spieler' : `${n} Spieler`),
+    generating: 'Welt wird erstellt …',
+    starting: 'Startet …',
+    join: 'Beitreten',
+    stop: 'Beenden',
+    hostTitle: 'Welt hosten',
+    hostBrowser: 'Eigene Welt',
+    hostNew: 'Neue Welt',
+    hostFiles: 'Gespeicherte LAN-Welten',
+    host: 'Hosten',
+    toBrowser: 'In Browser übernehmen',
+    imported: 'Welt übernommen – zu finden unter Einzelspieler.',
+    name: 'Name',
+    sizes: ['Klein', 'Mittel', 'Groß'],
+    diffs: ['Normal', 'Experte', 'Meister', 'Reise'],
+    create: 'Erstellen und hosten',
+    ipTitle: 'Über IP beitreten',
+    ipHint: 'IP:Port (z. B. 192.168.1.20:7777)',
+    badAddr: 'Adresse im Format IP:Port eingeben',
+    uploading: 'Welt wird übertragen …',
+    waitReady: 'Server startet …',
+    failed: (e: string) => `Fehler: ${e}`,
+    advanced: 'Projekt-Server (Raumcode)',
+    refresh: 'Aktualisieren',
+    pcNote: (ip: string) => `Echtes Terraria am PC: Mehrspieler → Über IP beitreten → ${ip}`,
+  },
+  en: {
+    title: 'Multiplayer',
+    lan: 'LAN worlds',
+    helperOk: (h: string) => `LAN host: ${h}`,
+    helperMissing: 'LAN helper not reachable. On the Mac run: npm run lan',
+    noTerraria: 'Terraria server not found – hosting unavailable (joining works).',
+    noServers: 'No world is being hosted right now.',
+    players: (n: number) => (n === 1 ? '1 player' : `${n} players`),
+    generating: 'Creating world …',
+    starting: 'Starting …',
+    join: 'Join',
+    stop: 'Stop',
+    hostTitle: 'Host a world',
+    hostBrowser: 'My world',
+    hostNew: 'New world',
+    hostFiles: 'Saved LAN worlds',
+    host: 'Host',
+    toBrowser: 'Copy to browser',
+    imported: 'World copied – find it under Single Player.',
+    name: 'Name',
+    sizes: ['Small', 'Medium', 'Large'],
+    diffs: ['Classic', 'Expert', 'Master', 'Journey'],
+    create: 'Create and host',
+    ipTitle: 'Join via IP',
+    ipHint: 'IP:port (e.g. 192.168.1.20:7777)',
+    badAddr: 'Enter the address as IP:port',
+    uploading: 'Sending world …',
+    waitReady: 'Server is starting …',
+    failed: (e: string) => `Error: ${e}`,
+    advanced: 'Project server (room code)',
+    refresh: 'Refresh',
+    pcNote: (ip: string) => `Real Terraria on PC: Multiplayer → Join via IP → ${ip}`,
+  },
+};
+function L() { return (Lang.activeCultureName ?? '').startsWith('de') ? MP_TEXT.de : MP_TEXT.en; }
+
+interface LanServerInfo { port: number; name: string; ready: boolean; generating: boolean; progress: string; players: string[] }
+interface LanWorldInfo { file: string; name: string; source: 'browser' | 'terraria'; bytes: number; mtime: number }
+interface LanStatus { ok: boolean; terraria: boolean; ips: string[]; servers: LanServerInfo[]; worlds: LanWorldInfo[] }
+
+function helperBase(): string {
+  const q = new URLSearchParams(location.search);
+  const host = q.get('lanhost') ?? (location.hostname || '127.0.0.1');
+  const h = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  return `http://${h}:${q.get('vbridge') ?? '5290'}`;
+}
+
+let mpStyleDone = false;
+function ensureMpStyle(): void {
+  if (mpStyleDone) return;
+  mpStyleDone = true;
+  const st = document.createElement('style');
+  st.textContent = `
+.sw-mp { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20;
+  width: min(92vw, 680px); max-height: 92vh; max-height: 92dvh; display: flex; flex-direction: column;
+  font-family: "Fusion Pixel 12px", "Microsoft YaHei", sans-serif; color: #fff; cursor: auto; }
+.sw-mp-title { align-self: center; padding: 8px 26px; margin-bottom: 12px; font-size: 20px; white-space: nowrap;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+.sw-mp-body { padding: 14px; overflow-y: auto; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; }
+.sw-mp h3 { margin: 4px 0 0; font-size: 17px; font-weight: normal; color: #fff;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+.sw-mp .sw-mp-note { font-size: 13px; color: #cfd6f4; text-shadow: 1px 1px 0 #000; }
+.sw-mp .sw-mp-note.err { color: #ff9a8a; }
+.sw-mp-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 52px; }
+.sw-mp-row .info { flex: 1; min-width: 0; }
+.sw-mp-row .info .n { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+.sw-mp-row .info .s { font-size: 12px; color: #cfd6f4; text-shadow: 1px 1px 0 #000; }
+.sw-mp .sw-vbtn { min-height: 40px; padding: 6px 14px; font-size: 15px; color: #fff; cursor: pointer; flex: none; }
+.sw-mp-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.sw-mp-tabs .sw-vbtn.on { color: #ffe745; }
+.sw-mp-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sw-mp input[type=text], .sw-mp select { min-height: 40px; padding: 6px 10px; font: inherit; font-size: 15px; color: #fff;
+  background: rgba(20, 28, 60, 0.85); border: 2px solid #0b1030; border-radius: 4px; flex: 1 1 160px; min-width: 0; }
+.sw-mp-footer { display: flex; gap: 10px; margin-top: 12px; }
+.sw-mp-footer .sw-vbtn { flex: 1; height: 50px; font-size: 17px; }
+.sw-mp-adv summary { cursor: pointer; color: #cfd6f4; font-size: 13px; }
+.sw-mp-adv[open] { background: rgba(10, 16, 40, 0.35); padding: 8px; border-radius: 4px; }
+@media (hover: none) and (pointer: coarse) { .sw-mp .sw-vbtn { min-height: 46px; } }
+`;
+  document.head.appendChild(st);
+}
+
+class LanSection {
+  private status: LanStatus | null = null;
+  private statusEl: HTMLElement;
+  private serversEl: HTMLElement;
+  private hostEl: HTMLElement;
+  private hostTab: 'browser' | 'new' | 'files' = 'new';
+  private msgEl: HTMLElement;
+  private ipInput: HTMLInputElement;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  /** Port, dem nach dem Hosten automatisch beigetreten wird, sobald der Server bereit ist */
+  private autoJoinPort: number | null = null;
+  private destroyed = false;
+  private seenMounted = false;
+
+  constructor(parent: HTMLElement, private cb: MultiplayerSelectCallbacks) {
+    const t = L();
+    parent.appendChild(el('h3', undefined, t.lan));
+    this.statusEl = el('div', 'sw-mp-note');
+    parent.appendChild(this.statusEl);
+    this.serversEl = el('div');
+    this.serversEl.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+    parent.appendChild(this.serversEl);
+    parent.appendChild(el('h3', undefined, t.hostTitle));
+    this.hostEl = el('div');
+    this.hostEl.style.cssText = 'display:flex; flex-direction:column; gap:8px;';
+    parent.appendChild(this.hostEl);
+    this.msgEl = el('div', 'sw-mp-note');
+    parent.appendChild(this.msgEl);
+    parent.appendChild(el('h3', undefined, t.ipTitle));
+    const ipRow = el('div', 'sw-mp-form');
+    this.ipInput = el('input') as HTMLInputElement;
+    this.ipInput.type = 'text';
+    this.ipInput.placeholder = t.ipHint;
+    this.ipInput.value = `${location.hostname || '127.0.0.1'}:7777`;
+    const ipBtn = el('button', 'sw-vbtn', t.join) as HTMLButtonElement;
+    ipBtn.onclick = () => {
+      const v = this.ipInput.value.trim();
+      if (!/^[\w.-]+:\d+$/.test(v)) { this.msg(t.badAddr, true); return; }
+      this.joinTarget(v);
+    };
+    this.ipInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') ipBtn.click(); });
+    ipRow.append(this.ipInput, ipBtn);
+    parent.appendChild(ipRow);
+    this.renderHost();
+    void this.refresh();
+    this.timer = setInterval(() => { if (!this.destroyed) void this.refresh(); }, 2000);
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+    if (this.timer) clearInterval(this.timer);
+  }
+
+  private msg(text: string, err = false): void {
+    this.msgEl.textContent = text;
+    this.msgEl.classList.toggle('err', err);
+  }
+
+  private async api<T>(path: string, init?: RequestInit): Promise<T> {
+    const r = await fetch(`${helperBase()}${path}`, { cache: 'no-store', ...init });
+    const data = await r.json() as T & { ok?: boolean; error?: string };
+    if (!r.ok || data.ok === false) throw new Error(data.error ?? `HTTP ${r.status}`);
+    return data;
+  }
+
+  async refresh(): Promise<void> {
+    // Panel entfernt (Zurück/Beitreten) → Abfragen einstellen; vor dem ersten Einhängen nicht
+    if (this.statusEl.isConnected) this.seenMounted = true;
+    else if (this.seenMounted) { this.destroy(); return; }
+    const t = L();
+    try {
+      this.status = await this.api<LanStatus>('/api/status');
+    } catch {
+      this.status = null;
+    }
+    if (this.destroyed) return;
+    const st = this.status;
+    if (!st) {
+      this.statusEl.textContent = t.helperMissing;
+      this.statusEl.classList.add('err');
+    } else {
+      const ip = st.ips[0] ?? location.hostname;
+      this.statusEl.textContent = `${t.helperOk(ip)}${st.terraria ? '' : ` · ${t.noTerraria}`}`;
+      this.statusEl.classList.toggle('err', !st.terraria);
+    }
+    this.renderServers();
+    if (this.hostTab === 'files') this.renderHost();
+    // automatisch beitreten, sobald der eben gehostete Server bereit ist
+    if (this.autoJoinPort != null && st) {
+      const s = st.servers.find((x) => x.port === this.autoJoinPort);
+      if (s?.ready) { const port = this.autoJoinPort; this.autoJoinPort = null; this.cb.onJoinVanilla(`127.0.0.1:${port}`); }
+      else if (s) this.msg(s.generating ? `${L().generating} ${s.progress.split(' - ')[0]}` : L().waitReady);
+      else { this.autoJoinPort = null; this.msg(L().failed('Server beendet'), true); }
+    }
+  }
+
+  private renderServers(): void {
+    const t = L();
+    this.serversEl.textContent = '';
+    const list = this.status?.servers ?? [];
+    if (!this.status) return;
+    if (!list.length) { this.serversEl.appendChild(el('div', 'sw-mp-note', t.noServers)); return; }
+    for (const s of list) {
+      const row = el('div', 'sw-mp-row sw-vpanel-item');
+      const info = el('div', 'info');
+      info.appendChild(el('div', 'n', s.name));
+      const sub = s.ready ? `${t.players(s.players.length)} · Port ${s.port}`
+        : s.generating ? `${t.generating} ${s.progress.split(' - ')[0]}` : t.starting;
+      info.appendChild(el('div', 's', sub));
+      row.appendChild(info);
+      const join = el('button', 'sw-vbtn', t.join) as HTMLButtonElement;
+      join.disabled = !s.ready;
+      join.style.opacity = s.ready ? '' : '0.5';
+      join.onclick = () => this.joinTarget(`127.0.0.1:${s.port}`);
+      const stop = el('button', 'sw-vbtn', t.stop) as HTMLButtonElement;
+      stop.onclick = () => void this.api('/api/stop', { method: 'POST', body: JSON.stringify({ port: s.port }) }).then(() => this.refresh());
+      row.append(join, stop);
+      this.serversEl.appendChild(row);
+    }
+    const ip = this.status.ips[0];
+    if (ip && list.some((s) => s.ready)) this.serversEl.appendChild(el('div', 'sw-mp-note', t.pcNote(`${ip}:${list.find((s) => s.ready)!.port}`)));
+  }
+
+  /** Beitreten braucht einen Charakter → Charakterauswahl, dann verbinden */
+  private joinTarget(target: string): void {
+    this.cb.onNeedCharacter(() => this.cb.onJoinVanilla(target));
+  }
+
+  private renderHost(): void {
+    const t = L();
+    this.hostEl.textContent = '';
+    const tabs = el('div', 'sw-mp-tabs');
+    const mkTab = (id: 'browser' | 'new' | 'files', label: string) => {
+      const b = el('button', `sw-vbtn${this.hostTab === id ? ' on' : ''}`, label) as HTMLButtonElement;
+      b.onclick = () => { this.hostTab = id; this.renderHost(); };
+      tabs.appendChild(b);
+    };
+    mkTab('new', t.hostNew);
+    mkTab('browser', t.hostBrowser);
+    mkTab('files', t.hostFiles);
+    this.hostEl.appendChild(tabs);
+    if (this.hostTab === 'new') {
+      const form = el('div', 'sw-mp-form');
+      const name = el('input') as HTMLInputElement;
+      name.type = 'text';
+      name.placeholder = t.name;
+      name.value = 'LAN-Welt';
+      const size = el('select') as HTMLSelectElement;
+      t.sizes.forEach((s, i) => size.appendChild(new Option(s, ['small', 'medium', 'large'][i])));
+      const diff = el('select') as HTMLSelectElement;
+      t.diffs.forEach((s, i) => diff.appendChild(new Option(s, ['normal', 'expert', 'master', 'journey'][i])));
+      const go = el('button', 'sw-vbtn', t.create) as HTMLButtonElement;
+      go.onclick = () => this.cb.onNeedCharacter(() => void this.host({ create: { name: name.value, size: size.value, difficulty: diff.value } }));
+      form.append(name, size, diff, go);
+      this.hostEl.appendChild(form);
+    } else if (this.hostTab === 'browser') {
+      // Charakter → Welt aus der Browser-Liste → als .wld an den Server → hosten → beitreten
+      const go = el('button', 'sw-vbtn', `${t.hostBrowser} …`) as HTMLButtonElement;
+      go.onclick = () => this.cb.onCreateRoomFlow((json, worldName) => void this.hostBrowserWorld(json, worldName));
+      this.hostEl.appendChild(go);
+    } else {
+      const worlds = this.status?.worlds ?? [];
+      if (!worlds.length) this.hostEl.appendChild(el('div', 'sw-mp-note', '—'));
+      for (const w of worlds.slice(0, 30)) {
+        const row = el('div', 'sw-mp-row sw-vpanel-item');
+        const info = el('div', 'info');
+        info.appendChild(el('div', 'n', w.name));
+        info.appendChild(el('div', 's', `${w.source === 'terraria' ? 'Terraria' : 'LAN'} · ${(w.bytes / 1048576).toFixed(1)} MB · ${new Date(w.mtime).toLocaleString()}`));
+        row.appendChild(info);
+        const host = el('button', 'sw-vbtn', t.host) as HTMLButtonElement;
+        host.onclick = () => this.cb.onNeedCharacter(() => void this.host({ file: w.file }));
+        row.appendChild(host);
+        if (this.cb.importWld) {
+          const imp = el('button', 'sw-vbtn', t.toBrowser) as HTMLButtonElement;
+          imp.onclick = () => void this.importToBrowser(w);
+          row.appendChild(imp);
+        }
+        this.hostEl.appendChild(row);
+      }
+    }
+  }
+
+  private async host(body: { file?: string; create?: { name: string; size: string; difficulty: string } }): Promise<void> {
+    try {
+      this.msg(L().waitReady);
+      const r = await this.api<{ port: number }>('/api/host', { method: 'POST', body: JSON.stringify(body) });
+      this.autoJoinPort = r.port;
+      await this.refresh();
+    } catch (e) {
+      this.msg(L().failed((e as Error).message), true);
+    }
+  }
+
+  private async hostBrowserWorld(json: string, worldName: string): Promise<void> {
+    if (!this.cb.exportWld) return;
+    try {
+      this.msg(L().uploading);
+      const bytes = await this.cb.exportWld(json);
+      const up = await this.api<{ file: string }>(`/api/upload?replace=1&name=${encodeURIComponent(worldName)}`, {
+        method: 'POST', body: bytes as BodyInit,
+      });
+      await this.host({ file: up.file });
+    } catch (e) {
+      this.msg(L().failed((e as Error).message), true);
+    }
+  }
+
+  private async importToBrowser(w: LanWorldInfo): Promise<void> {
+    try {
+      const r = await fetch(`${helperBase()}/api/world?file=${encodeURIComponent(w.file)}`, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await this.cb.importWld!(new Uint8Array(await r.arrayBuffer()), w.name);
+      this.msg(L().imported);
+    } catch (e) {
+      this.msg(L().failed((e as Error).message), true);
     }
   }
 }

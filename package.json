@@ -24,7 +24,9 @@
     "playsoft": "node scripts/play.mjs --soft",
     "playtrace": "node scripts/play.mjs --trace",
     "remaster-proxy": "node tools/remaster-proxy.mjs",
-    "play2": "node scripts/play.mjs --isolate"
+    "play2": "node scripts/play.mjs --isolate",
+    "lan": "node scripts/serve-lan.mjs",
+    "lan:host": "node scripts/lan-host.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.3",

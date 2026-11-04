@@ -246,6 +246,13 @@ const CSS = `
 @media (max-width: 620px), (pointer: coarse) {
   .sw-npc-dialog { transform: scale(0.68); transform-origin: 50% 0; }
 }
+/* Fork: Touch quer mit genug Platz (Handy quer/iPad) — groß wie am PC-Bildschirm */
+@media (pointer: coarse) and (min-width: 800px) {
+  .sw-npc-dialog { transform: scale(0.9); top: 60px; }
+}
+@media (pointer: coarse) and (min-width: 1100px) {
+  .sw-npc-dialog { transform: scale(1.15); top: 80px; }
+}
 @media (max-width: 420px) {
   .sw-npc-dialog { transform: scale(0.52); transform-origin: 50% 0; } }
 .sw-npc-shop {

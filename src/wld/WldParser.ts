@@ -250,17 +250,34 @@ export interface WldWorld {
 
 export class WldParseError extends Error {}
 
+/** Fork: NPCID.FromLegacyName für Welten v<190 (Terraria 1.3.0–1.3.4 speichern den
+ *  englischen Typnamen statt der ID). Nur speicherbare NPCs: Stadt-NPCs + Säulen.
+ *  Unbekannt → 0 (wird wie bisher verworfen). */
+const LEGACY_NPC_IDS: Record<string, number> = {
+  'Merchant': 17, 'Nurse': 18, 'Arms Dealer': 19, 'Dryad': 20, 'Guide': 22, 'Old Man': 37,
+  'Demolitionist': 38, 'Clothier': 54, 'Goblin Tinkerer': 107, 'Wizard': 108, 'Mechanic': 124,
+  'Santa Claus': 142, 'Truffle': 160, 'Steampunker': 178, 'Dye Trader': 207, 'Party Girl': 208,
+  'Cyborg': 209, 'Painter': 227, 'Witch Doctor': 228, 'Pirate': 229, 'Stylist': 353,
+  'Travelling Merchant': 368, 'Angler': 369, 'Tax Collector': 441, 'Skeleton Merchant': 453,
+  'Tavernkeep': 550, 'Golfer': 588,
+  'Vortex Pillar': 422, 'Stardust Pillar': 493, 'Nebula Pillar': 507, 'Solar Pillar': 517,
+};
+const legacyNpcId = (name: string): number => LEGACY_NPC_IDS[name] ?? 0;
+
 export function parseWld(buf: Uint8Array): WldWorld {
   const r = new BinaryReaderLE(buf);
   const version = r.u32();
-  if (version < 210) {
-    throw new WldParseError(`不支持的世界文件版本 ${version}（需要 1.4+，version >= 210）。请在游戏中重新保存该地图。`);
+  // Fork: Untergrenze 210 → 140 (Terraria 1.3.0). Alle Kopf-/Abschnittsfelder sind
+  //  ohnehin einzeln versionsgegated (WorldFile.LoadWorld_Version2); einzige Lücke
+  //  war die NPC-Kennung v<190 (Name statt ID) → LEGACY_NPC_IDS unten.
+  if (version < 140) {
+    throw new WldParseError(`World file version ${version} is too old (Terraria 1.3 or newer required). Open and save it once in Terraria.`);
   }
   // R4-11（WF57:197/:717/:3027/:3442 四处 `num > 325` 拒载同语义；★1458 全部抬到
   // `> 326`——GameVersionID.Terraria1458Release=326,头布局无新字段,326 与 325 同构）：
   // 未来版本按当前头布局静默错解比明确拒绝更危险——327+ 一律拒。
   if (version > 326) {
-    throw new WldParseError(`不支持的世界文件版本 ${version}（本复刻最高支持 326 / 1.4.5.8）。`);
+    throw new WldParseError(`World file version ${version} is newer than supported (max 326 / 1.4.5.8).`);
   }
   // ★R16-7③（2026-08-24）：FileMetadata 门 = 135（WF57:1913），非 140——
   //  v135-139 旧档（1.3 中段）头魔数段存在,曾跳读 → 后续全乱
@@ -484,7 +501,7 @@ export function parseWld(buf: Uint8Array): WldWorld {
     if (r.boolean()) flags.towerActiveNebula = true;
     if (r.boolean()) flags.towerActiveStardust = true;
   }
-  // （v<140 原版在此 return 终读——本解析器只支持 >=210,else 不补读）
+  // （v<140 原版在此 return 终读——本解析器只支持 >=140,else 不补读）
   if (r.boolean()) flags.lunarApocalypseUp = true;                                         // apocalypse
   // ★SW-FX33（2026-09-11）：派对段捕获（原 WF:1367-1374 同位——曾读位即弃,见接口注）。
   //  读序=WF:2267-2275:manual(bool)/genuine(bool)/cooldown(i32)/celebrating(i32 n + n×i32)
@@ -697,8 +714,7 @@ export function parseWld(buf: Uint8Array): WldWorld {
       for (let i = 0; i < n; i++) shimmered.push(r.i32());
     }
     while (r.boolean()) {
-      const spriteId = version >= 190 ? r.i32() : 0;
-      if (version < 190) r.string();
+      const spriteId = version >= 190 ? r.i32() : legacyNpcId(r.string());
       const displayName = r.string();
       const x = r.f32(), y = r.f32();
       // ★homeless 不能丢（2026-08-31）：原版无家 NPC 的 homeTile 并非恒 -1——
@@ -723,8 +739,7 @@ export function parseWld(buf: Uint8Array): WldWorld {
     //  四塔齐无 398 时误启 ImpendingDoom 倒计时。position=实体左上角像素。
     if (version >= 140) {
       while (r.boolean()) {
-        const id = version >= 190 ? r.i32() : 0;
-        if (version < 190) r.string();   // NPCID.FromLegacyName（旧档形态,保流位）
+        const id = version >= 190 ? r.i32() : legacyNpcId(r.string());   // NPCID.FromLegacyName
         const x = r.f32(), y = r.f32();
         pillarNpcs.push({ id, x, y });
       }

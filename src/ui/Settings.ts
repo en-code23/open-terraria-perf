@@ -54,7 +54,28 @@ const CSS = `
   overflow-y: auto; max-height: 60vh; }
 .sw-set-row { display: flex; align-items: center; gap: 10px; }
 .sw-set-row > span:first-child { width: 88px; color: #c8d0f0; }
-.sw-set-row input[type=range] { flex: 1; accent-color: #7d92d6; }
+/* Fork: Schieberegler wie im Original (IngameOptions.DrawValueBar: ColorBar-Rahmen,
+   167 ColorBlips Schwarz→Weiß ab (5,4), ColorSlider-Griff, Hover = Slider_Highlight gelb) */
+.sw-vslider { --vs: 1.5; position: relative; display: inline-block; flex: none;
+  width: calc(178px * var(--vs)); height: calc(16px * var(--vs)); }
+.sw-vslider input[type=range] { -webkit-appearance: none; appearance: none; display: block;
+  margin: 0; padding: 0; width: 100%; height: 100%; cursor: pointer; image-rendering: pixelated;
+  background:
+    linear-gradient(90deg, #000, #fff) calc(5px * var(--vs)) calc(4px * var(--vs)) / calc(167px * var(--vs)) calc(8px * var(--vs)) no-repeat,
+    url(sprites/vanilla/ColorBar.png) 0 0 / 100% 100% no-repeat; }
+.sw-vslider input[type=range]::-webkit-slider-runnable-track { background: transparent; height: 100%; border: 0; }
+.sw-vslider input[type=range]::-moz-range-track { background: transparent; height: 100%; border: 0; }
+.sw-vslider input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; border: 0; border-radius: 0;
+  width: calc(11px * var(--vs)); height: calc(25px * var(--vs)); margin-top: calc(-4.5px * var(--vs));
+  background: url(sprites/vanilla/ColorSlider.png) 0 0 / 100% 100% no-repeat; image-rendering: pixelated; }
+.sw-vslider input[type=range]::-moz-range-thumb { border: 0; border-radius: 0;
+  width: calc(11px * var(--vs)); height: calc(25px * var(--vs));
+  background: url(sprites/vanilla/ColorSlider.png) 0 0 / 100% 100% no-repeat; image-rendering: pixelated; }
+.sw-vslider:hover::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: rgb(255, 231, 69);
+  -webkit-mask: url(sprites/vanilla-ui/UI_Slider_Highlight.png) 0 0 / 100% 100% no-repeat;
+  mask: url(sprites/vanilla-ui/UI_Slider_Highlight.png) 0 0 / 100% 100% no-repeat; }
+@media (max-width: 760px) { .sw-vslider { --vs: 1; } }
 .sw-set-row .val { width: 40px; text-align: right; color: #ffe8a0; }
 .sw-set-row input[type=checkbox] { width: 18px; height: 18px; accent-color: #7d92d6; }
 .sw-set-btns { display: flex; flex-direction: column; gap: 8px; }
@@ -221,13 +242,19 @@ export class SettingsPanel {
     input.value = String(get());
     const val = document.createElement('span');
     val.className = 'val';
-    val.textContent = String(Math.round(get() * 100));
+    // Fork: Werte > 1.5 (z. B. Langdruck in ms) direkt anzeigen statt ×100
+    const fmt = (v: number) => String(max > 1.5 ? Math.round(v) : Math.round(v * 100));
+    val.textContent = fmt(get());
     input.addEventListener('input', () => {
       const v = Number(input.value);
       set(v);
-      val.textContent = String(Math.round(v * 100));
+      val.textContent = fmt(v);
     });
-    row.append(span, input, val);
+    // Fork: Original-Optik (siehe .sw-vslider)
+    const wrap = document.createElement('span');
+    wrap.className = 'sw-vslider';
+    wrap.appendChild(input);
+    row.append(span, wrap, val);
     return row;
   }
 
@@ -597,6 +624,8 @@ export class SettingsPanel {
         //  同款 checkbox);持久化走 options 通道(KvStore 'sandboxworld.options'),
         //  行位紧随「帧率上限」=帧率族相邻
         this.toggle(Lang.text('Mods.SandboxWorld.Settings.FpsDisplay'), () => d.fpsDisplay, (v) => void options.set('fpsDisplay', v)),
+        // Fork: Vollbildkarte ohne Nebel (X-Ray)
+        this.toggle(Lang.text('Mods.SandboxWorld.Settings.MapXray'), () => d.mapXray, (v) => void options.set('mapXray', v)),
         // 渲染模式三档(2026-08-18):GPU 加速(默认)/CPU 软渲染(零 GPU 预算,
         // 多开稳定)/自动(GPU 优先,崩溃自动切 CPU,稳定回切)
         this.modeRow(
@@ -948,6 +977,8 @@ export class SettingsPanel {
             : 'Mods.SandboxWorld.Settings.Off'),
           () => { void options.set('touchSmartCursorDefault', !d2.touchSmartCursorDefault); },
         ),
+        // Fork: Auto-Sprung (Mobil-App-Verhalten)
+        this.toggle(Lang.text('Mods.SandboxWorld.Settings.TouchAutoJump'), () => d2.touchAutoJump, (v) => void options.set('touchAutoJump', v)),
         // HUD 缩放档(auto=视口判定 D0/T1/T2/T3)+微调(离散档上的乘法带)
         this.modeRow(
           Lang.text('Mods.SandboxWorld.Settings.HudScaleMode'),

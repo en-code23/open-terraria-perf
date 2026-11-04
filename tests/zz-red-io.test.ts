@@ -120,18 +120,18 @@ function mkWldSave(): SaveData {
 
 describe('红队:plr 对抗输入', () => {
   it('全 0xFF 垃圾密文 → 明确拒绝', () => {
-    expect(() => parsePlr(new Uint8Array(256).fill(0xff))).toThrow(/版本|魔数|越界|Role|plr/);
+    expect(() => parsePlr(new Uint8Array(256).fill(0xff))).toThrow(/版本|魔数|越界|Role|plr|Player file/);
   });
   it('密文非 16 对齐/空 → 拒绝', () => {
-    expect(() => parsePlr(new Uint8Array(15))).toThrow(/对齐/);
-    expect(() => parsePlr(new Uint8Array(0))).toThrow(/对齐/);
+    expect(() => parsePlr(new Uint8Array(15))).toThrow(/length/);
+    expect(() => parsePlr(new Uint8Array(0))).toThrow(/length/);
   });
   it('version=0(全零流)→ 过旧拒绝', () => {
-    expect(() => parsePlr(enc(new PlrWriter().i32(0).build()))).toThrow(/过旧/);
+    expect(() => parsePlr(enc(new PlrWriter().i32(0).build()))).toThrow(/too old/);
   });
-  it('version=326(未来)→ 拒绝且只读 name 不炸', () => {
-    const w = new PlrWriter().i32(326).str('未来档');
-    expect(() => parsePlr(enc(w.build()))).toThrow(/更新/);
+  it('version=327(未来)→ 拒绝且只读 name 不炸', () => {   // Fork: 326 = 1.4.5.8 wird gelesen
+    const w = new PlrWriter().i32(327).str('未来档');
+    expect(() => parsePlr(enc(w.build()))).toThrow(/newer/);
   });
   it('魔数篡改 → 拒绝', () => {
     const plain = plrSkeleton();
@@ -189,7 +189,7 @@ describe('红队:wld 对抗输入', () => {
     for (const ch of 'relogic') w.byte(ch.charCodeAt(0));
     w.byte(2); w.u32?.(1); w.i64(0n); w.i16(11);
     for (let i = 0; i < 11; i++) w.i32(0);
-    expect(() => parseWldToSave(w.build())).toThrow(/327|不支持/);
+    expect(() => parseWldToSave(w.build())).toThrow(/327|不支持|newer/);
   });
   it('fileType=3(Player 冒充世界)→ 拒绝', () => {
     const w = new PlrWriter();

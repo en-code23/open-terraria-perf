@@ -11,6 +11,7 @@ import { CharacterStore, type CharacterMeta } from '../save/CharacterStore';
 import { type Appearance, DIFFICULTY_INFO, validateAppearance } from '../player/Appearance';
 import { compositePaperDoll, dollFrame, walkFrame } from '../player/PaperDoll';
 import { parsePlr, exportPlr } from '../save/PlrImport';
+import { openTerrariaImport } from './TerrariaImport';
 import type { SaveData } from '../save/serialize';
 import { Lang } from '../i18n/Lang';
 import { ensureVanillaKit } from './vanillaKit';
@@ -163,7 +164,12 @@ export class CharSelectPanel {
     this.body = this.panel.querySelector('.sw-vsel-list')!;
     this.panel.querySelector('[data-act=back]')!.addEventListener('click', () => this.close(flow.onBack));
     this.panel.querySelector('[data-act=new]')!.addEventListener('click', () => this.close(flow.onNew));
-    this.panel.querySelector('[data-act=import]')!.addEventListener('click', () => this.pickImportFile());
+    // Fork: erst die Spielstände des echten Terraria anbieten (TerrariaImport), Datei-Dialog als Ausweich
+    this.panel.querySelector('[data-act=import]')!.addEventListener('click', () => openTerrariaImport({
+      kind: 'player', under: this.panel,
+      onFile: (f) => this.onImportFile(f),
+      onBrowse: () => this.pickImportFile(),
+    }));
     // 隐藏文件选择器(导入通道:.sbchar.json 自有档 / .plr 原版档,见 onImportFile)
     const file = document.createElement('input');
     file.type = 'file';

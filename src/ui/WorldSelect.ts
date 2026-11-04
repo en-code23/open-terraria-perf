@@ -14,6 +14,7 @@
 import { WorldStore, type WorldMeta } from '../save/WorldStore';
 import { refreshStorageStatus } from '../save/StoragePersistence';   // ★BJ611 存储状态行
 import { ensureStyle } from './CharSelect';
+import { openTerrariaImport } from './TerrariaImport';
 import { Lang } from '../i18n/Lang';
 import { parseSeedChain } from '../world/gen/SeedEasterEggs';   // ★IIIII229 ⑥M1 parseSeed→parseSeedChain（gen 同口径）
 import { saveClient } from '../workers/SaveClient';
@@ -228,7 +229,12 @@ export class WorldSelectPanel {
     this.fileInput.style.display = 'none';
     this.panel.querySelector('[data-act=import]')!.addEventListener('click', () => {
       if (this.importBusy) return;
-      this.fileInput.click();
+      // Fork: erst die Welten des echten Terraria anbieten (TerrariaImport), Datei-Dialog als Ausweich
+      openTerrariaImport({
+        kind: 'world', under: this.panel,
+        onFile: (f) => this.runImport(f),
+        onBrowse: () => this.fileInput.click(),
+      });
     });
     this.fileInput.addEventListener('change', () => {
       const f = this.fileInput.files?.[0];

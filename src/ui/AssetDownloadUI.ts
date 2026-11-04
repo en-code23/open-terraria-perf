@@ -368,6 +368,24 @@ export function warnAssetPipelineDown(): void {
   if (typeof document === 'undefined' || pipeEl || pipeAck) return;
   const fail = assetPipelineFailure();
   if (!fail.down) return;
+  // Fork: Ohne Service Worker (z. B. iPad/Handy über http im WLAN) laden die
+  // Einzeldateien direkt, solange der Build sie enthält (nicht "geprunt").
+  // Dann ist alles in Ordnung → keine Warnung.
+  void looseAssetsReachable().then((ok) => { if (ok) pipeAck = true; else showPipelineDown(); });
+}
+
+let looseProbe: Promise<boolean> | null = null;
+function looseAssetsReachable(): Promise<boolean> {
+  looseProbe ??= fetch('sprites/vanilla/Tiles_0.png', { method: 'HEAD', cache: 'no-store' })
+    .then((r) => r.ok && (r.headers.get('content-type') ?? '').startsWith('image/'))
+    .catch(() => false);
+  return looseProbe;
+}
+
+function showPipelineDown(): void {
+  if (typeof document === 'undefined' || pipeEl || pipeAck) return;
+  const fail = assetPipelineFailure();
+  if (!fail.down) return;
   // 骨架徽标在管线 down 时永不翻真——摘掉,由本弹窗接管示警(避免双 UI)
   if (badgeEl && badgePending) {
     badgeEl.remove(); badgeEl = null; badgePending = false;

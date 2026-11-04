@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="de" translate="no">
 <head>
   <meta charset="UTF-8" />
+  <meta name="google" content="notranslate" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <title>Open Terraria 1.4.5.8</title>
@@ -34,7 +35,7 @@
     "applicationCategory": "Game",
     "genre": ["Sandbox", "Action-Adventure", "2D", "Pixel Graphics"],
     "playMode": ["SinglePlayer", "MultiPlayer"],
-    "inLanguage": ["zh-CN", "en"],
+    "inLanguage": ["de", "en"],
     "author": { "@type": "Organization", "name": "SandboxWorldOnline", "url": "https://github.com/SandboxWorldOnline" },
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
   }
@@ -48,8 +49,8 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="SandboxWorld" />
-  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-title" content="Open-Terraria" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-512.png" />
   <script>
     // 非 IP/localhost 的 http 访问强制跳 https（安全上下文:SW/剪贴板/指针锁等
     // 需 https;局域网 IP 与 localhost 直连无证书场景不跳）。置于最前,任何
@@ -209,6 +210,8 @@
     /* 原版节奏:_splashFrameCount 0..70 循环(60fps),row=(count/3+10)%19 且
        count/3≥19 归 0 → 第 10 行占 16 tick(16/70=22.85714%),其余 18 行各 3 tick
        (3/70=4.28571%),70 tick=1.16667s;steps(1,end) 逐段保持到段尾=离散跳帧。 */
+    /* Fork: keine Sonnenblume beim Start */
+    #sw-boot-static .sb-flower { display: none !important; }
     @keyframes sb-flower {
       0% { background-position: 0 55.55556%; }
       22.85714% { background-position: 0 61.11111%; }
