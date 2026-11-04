@@ -279,6 +279,9 @@ function targetOk(req, host, port) {
   const k = addrKind(host);
   if (k === 'private') return true;
   if (k === 'loopback') return servers.has(port) || fromLoopback(req);
+  // Internet-Server: nur für das Spiel im Browser (Origin-Kopf vorhanden und erlaubt,
+  // siehe originOk) und abschaltbar mit LAN_BRIDGE_PUBLIC=0
+  if (process.env.LAN_BRIDGE_PUBLIC === '0' || !req.headers.origin) return false;
   return isPublicIp(String(host).replace(/^\[|\]$/g, ''));
 }
 /** Hostname → IP (Server per Domain, z. B. „terraria.example.org“) */
