@@ -87,7 +87,11 @@ function startServer({ file, create }) {
   if (!SERVER_BIN) throw new Error('Terraria-Server nicht gefunden (Steam-Installation?)');
   if (servers.size >= 4) throw new Error('Es laufen schon 4 Server');
   const port = freePort();
-  const args = ['-port', String(port), '-players', '16', '-noupnp'];
+  // Fork: Der Terraria-Server lauscht intern (Port+10000); nach außen nimmt dieser Helfer
+  // (Node) die Verbindungen an und reicht sie weiter. So muss TerrariaServer nicht in der
+  // macOS-Firewall freigegeben werden — sonst kommen iPhone/PC im WLAN nicht durch.
+  const innerPort = port + 10000;
+  const args = ['-port', String(innerPort), '-players', '16', '-noupnp'];
   let name;
   let worldPath;
   if (file) {
@@ -113,8 +117,19 @@ function startServer({ file, create }) {
   const env = { ...process.env };
   if (process.platform === 'darwin') env.DYLD_LIBRARY_PATH = path.join(cwd, 'osx');
   const proc = spawn(SERVER_BIN, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
-  const s = { proc, name, file: worldPath, port, ready: false, generating: !file, progress: '', players: new Set(), log: [] };
+  const s = { proc, name, file: worldPath, port, innerPort, ready: false, generating: !file, progress: '', players: new Set(), log: [] };
   servers.set(port, s);
+  s.proxy = net.createServer((client) => {
+    client.setNoDelay(true);
+    const up = net.connect({ host: '127.0.0.1', port: innerPort });
+    up.setNoDelay(true);
+    client.pipe(up); up.pipe(client);
+    const done = () => { client.destroy(); up.destroy(); };
+    client.on('error', done); up.on('error', done);
+    client.on('close', done); up.on('close', done);
+  });
+  s.proxy.on('error', (e) => console.log(`[lan] Weiterleitung Port ${port}: ${e.message}`));
+  s.proxy.listen(port, BIND);
   const onLine = (line) => {
     line = line.replace(/\r/g, '').trim();
     if (!line) return;
@@ -129,7 +144,7 @@ function startServer({ file, create }) {
   const feed = (d) => { buf += d.toString(); const parts = buf.split(/\n|(?=\d+(?:\.\d+)?% - )/); buf = parts.pop() ?? ''; parts.forEach(onLine); };
   proc.stdout.on('data', feed);
   proc.stderr.on('data', feed);
-  proc.on('exit', (code) => { servers.delete(port); console.log(`[lan] Server „${name}“ beendet (${code})`); });
+  proc.on('exit', (code) => { servers.delete(port); try { s.proxy.close(); } catch { /* */ } console.log(`[lan] Server „${name}“ beendet (${code})`); });
   console.log(`[lan] starte Server „${name}“ (Port ${port}) …`);
   return s;
 }
