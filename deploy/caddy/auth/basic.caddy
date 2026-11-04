@@ -1,0 +1,4 @@
+# Passwortschutz für die Spielseite (Benutzer/Hash aus .env: SITE_USER, SITE_PASSWORD_HASH)
+basic_auth {
+	{$SITE_USER} {$SITE_PASSWORD_HASH}
+}

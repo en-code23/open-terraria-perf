@@ -1,5 +1,6 @@
 // 入口：加载素材/字体/文案 → VUI 主菜单 → 生成/加载世界 → 进入游戏
 // 流程编排见 mainFlow.ts；本文件只做装配 + 游戏内键盘/开发者工具接线。
+import { loadDeployConfig, deployConfig } from './net/deployConfig';
 import { lowMemoryMode } from './core/lowMemory';
 import { FORK_DEV_KEYS } from './core/forkDev';
 import { installTerrariaSkin } from './ui/TerrariaSkin';
@@ -68,6 +69,7 @@ import { modBuffIconUrl } from './mods/buffs';
 import { setModAudioSink, getModWavData } from './mods/hooks';
 import { getModLoadResult } from './mods/loader';   // ★模组设置入口门控(loaded>0 才显示)
 import { openModSettingsPanel } from './mods/modSettingsPanel';
+void loadDeployConfig();   // Fork: Server-Deployment (ot-deploy.json) sofort holen
 
 // canvas 分配哨兵(2026-08-18):出生率 >20/s 持续 10s → console.warn 带出生栈
 // (cloudTint 340 张/秒事故的常驻防线;?cwatch=0 静默)。须在 UI/游戏模块
@@ -470,7 +472,7 @@ function openInGamePause(game: Game): void {
   if (FORK_VANILLA_INGAME_OPTIONS && flow) {
     const panel = flow.openSettings(true, {
       onBack: () => { if (pausePanel) finishInGamePause(game); },
-      extraActions: [...(!game.net?.active ? [{
+      extraActions: [...(!game.net?.active && !deployConfig() ? [{
         // Fork: „Für LAN öffnen“ (echter Terraria-Server über den LAN-Helfer)
         label: (Lang.activeCultureName ?? '').startsWith('de') ? 'Für LAN öffnen' : 'Open to LAN',
         onClick: () => {
@@ -1245,7 +1247,8 @@ kvHas('sandboxworld.quicksave').catch((e) => {
   //   PROD 下 SW 注册失败/激活超时/环境不支持时弹窗(reason/重试/复制诊断/
   //   仍要进入)——prune 发布形态下这种会话 vanilla 全家族贴图必然 404。
   //   调试旗 ?swfail 模拟该链路(dev 亦可触发)。?nosw=显式关闭,不打扰。
-  if ((import.meta.env.PROD || bootParams0.has('swfail')) && !bootParams0.has('nosw')) {
+  // Fork: VITE_NO_SW=1 (Server-Deployment, deploy/) = ohne Service Worker, Dateien kommen direkt
+  if ((import.meta.env.PROD || bootParams0.has('swfail')) && !bootParams0.has('nosw') && import.meta.env.VITE_NO_SW !== '1') {
     warnAssetPipelineDown();
   }
   warmAllAssets();

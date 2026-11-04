@@ -1,0 +1,24 @@
+# Open-Terraria — Webserver. SITE_ADDRESS = Domain (z. B. terraria.example.org → HTTPS automatisch)
+# oder ":80" (nur HTTP, z. B. Zugriff über die IP).
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# Mehrspieler-Brücke (WebSocket ⇄ TCP) und Server-Konfiguration fürs Spiel
+	@bridge path /bridge /bridge/*
+	handle @bridge {
+		reverse_proxy bridge:5290
+	}
+	handle /ot-deploy.json {
+		reverse_proxy bridge:5290
+	}
+
+	# das Spiel (optional mit Passwortschutz, AUTH_MODE=basic)
+	handle {
+		import /etc/caddy/auth/{$AUTH_MODE:none}.caddy
+		root * /srv
+		try_files {path} /index.html
+		header /index.html Cache-Control "no-cache"
+		header /assets/* Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+}

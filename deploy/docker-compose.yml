@@ -1,0 +1,82 @@
+# Open-Terraria auf einem eigenen Server — siehe deploy/README.md
+#   cd deploy && cp .env.example .env && nano .env
+#   docker compose up -d --build                          # nur das Spiel
+#   COMPOSE_PROFILES=terraria docker compose up -d --build   # + kleiner Terraria-Server (1–3 Spieler)
+name: open-terraria
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      AUTH_MODE: ${AUTH_MODE:-none}
+      SITE_USER: ${SITE_USER:-}
+      SITE_PASSWORD_HASH: ${SITE_PASSWORD_HASH:-}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - bridge
+    restart: unless-stopped
+
+  # Mehrspieler-Brücke: Browser können kein TCP → WebSocket ⇄ TCP zum Terraria-Server.
+  # Verbindet nur zu den erlaubten Zielen (eingebauter Server; optional Internet-Server).
+  bridge:
+    image: node:22-alpine
+    working_dir: /app
+    command: ["node", "bridge.mjs"]
+    volumes:
+      - ./bridge:/app:ro
+    environment:
+      TERRARIA_HOST: terraria
+      TERRARIA_PORT: "7777"
+      TERRARIA_NAME: ${TERRARIA_NAME:-Open-Terraria Server}
+      EXTRA_SERVERS: ${EXTRA_SERVERS:-}
+      ALLOW_PUBLIC_SERVERS: ${ALLOW_PUBLIC_SERVERS:-0}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      MAX_CONNECTIONS: ${MAX_CONNECTIONS:-12}
+    restart: unless-stopped
+
+  # OPTIONAL: kleiner echter Terraria-Server (1.4.5.8, kleine Welt, max. 3 Spieler).
+  # Nur aktiv mit COMPOSE_PROFILES=terraria. Welt bleibt im Volume terraria_world erhalten.
+  terraria:
+    profiles: ["terraria"]
+    image: beardedio/terraria:vanilla-1.4.5.8
+    platform: linux/amd64
+    working_dir: /vanilla
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        exec ./run.sh
+        -autocreate "$${TERRARIA_WORLD_SIZE:-1}"
+        -world "/config/$${TERRARIA_WORLD_NAME:-OpenTerraria}.wld"
+        -worldname "$${TERRARIA_WORLD_NAME:-OpenTerraria}"
+        -maxplayers "$${TERRARIA_MAX_PLAYERS:-3}"
+        -port 7777
+        $${TERRARIA_PASSWORD:+-password "$$TERRARIA_PASSWORD"}
+    environment:
+      TERRARIA_WORLD_NAME: ${TERRARIA_WORLD_NAME:-OpenTerraria}
+      TERRARIA_WORLD_SIZE: ${TERRARIA_WORLD_SIZE:-1}
+      TERRARIA_MAX_PLAYERS: ${TERRARIA_MAX_PLAYERS:-3}
+      TERRARIA_PASSWORD: ${TERRARIA_PASSWORD:-}
+    volumes:
+      - terraria_world:/config
+    # Standard: nur über das Spiel im Browser erreichbar. Für das echte Terraria am PC
+    # bzw. die iPhone-App TERRARIA_PUBLIC_BIND=0.0.0.0 setzen (Port 7777 öffnen).
+    ports:
+      - "${TERRARIA_PUBLIC_BIND:-127.0.0.1}:7777:7777"
+    stdin_open: true
+    tty: true
+    mem_limit: ${TERRARIA_MEMORY:-1g}
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
+  terraria_world:

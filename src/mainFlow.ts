@@ -1,5 +1,6 @@
 // 菜单/游戏流程编排（VUI 版）：主菜单 → 世界生成/读取 → 进游戏 → 退出回菜单。
 // main.ts 只做启动装配；本模块持有 Game 生命周期与 VUI/背景的 rAF 驱动。
+import { deployBridgeUrl, loadDeployConfig } from './net/deployConfig';
 import { lowMemoryMode } from './core/lowMemory';
 import { maybeInstallGpuLoggerFromUrl } from './render/GLStats';
 import { Game, grantStarterKit } from './core/Game';
@@ -1544,7 +1545,10 @@ function makeGame(): Game {
       // Fork: Brücke läuft auf dem Rechner, der das Spiel ausliefert (LAN: iPad/Handy → Mac)
       const bhParam = new URLSearchParams(location.search).get('vbridgehost');
       const bridgeHost = bhParam && isLocalNetAddr(bhParam) ? bhParam : (location.hostname || '127.0.0.1');
-      await g.joinVanillaGame(`ws://${bridgeHost.includes(':') && !bridgeHost.startsWith('[') ? `[${bridgeHost}]` : bridgeHost}:${bridgePort}/?host=${encodeURIComponent(host)}&port=${port}${vdump ? `&dump=${vdump}` : ''}`,
+      // Fork: auf einem eigenen Server (deploy/) läuft die Brücke unter /bridge desselben Hosts
+      await loadDeployConfig();
+      const deployUrl = deployBridgeUrl(host, port);
+      await g.joinVanillaGame(deployUrl ?? `ws://${bridgeHost.includes(':') && !bridgeHost.startsWith('[') ? `[${bridgeHost}]` : bridgeHost}:${bridgePort}/?host=${encodeURIComponent(host)}&port=${port}${vdump ? `&dump=${vdump}` : ''}`,
         (label, p) => ui.showProgress(label, 0.1 + p * 0.8));
       // 本地角色态回放（joinRoom 非 SSC 同款语义:vanilla 非 SSC 服=客户端权威,
       // 本地物品与上传账一致;缺这步=本地默认背包 vs 服务器真装备分叉）

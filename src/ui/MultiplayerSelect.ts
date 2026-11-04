@@ -3,6 +3,7 @@
 // 房主：选存档建房（勾选公开性 + 破坏保护 + 物品保护）→ 得 6 位房间码 → 进房。
 // 其他玩家：房间列表点击加入，或输房间码进非公开房。
 // 文案 = Mods.SandboxWorld.MP.*（自制联机 UI,原版无对应键）
+import { deployConfig } from '../net/deployConfig';
 import { prefGet, prefSet, prefRemove } from '../save/PrefsStore';
 import { Lang } from '../i18n/Lang';
 import { ensureVanillaKit } from './vanillaKit';
@@ -349,6 +350,9 @@ const MP_TEXT = {
     sizes: ['Klein', 'Mittel', 'Groß'],
     diffs: ['Normal', 'Experte', 'Meister', 'Reise'],
     create: 'Erstellen und hosten',
+    deployTitle: 'Server',
+    deployNone: 'Auf diesem Host läuft kein Terraria-Server. Über „Server beitreten“ kannst du anderen Servern beitreten (falls erlaubt).',
+    deploySub: 'Terraria-Server auf diesem Host',
     ipTitle: 'Server beitreten (Vanilla, TShock, LAN oder Internet)',
     ipHint: 'IP oder Domain[:Port] (z. B. 192.168.1.20 oder server.de:7777)',
     badAddr: 'Adresse als IP oder Domain eingeben, optional mit :Port',
@@ -383,6 +387,9 @@ const MP_TEXT = {
     sizes: ['Small', 'Medium', 'Large'],
     diffs: ['Classic', 'Expert', 'Master', 'Journey'],
     create: 'Create and host',
+    deployTitle: 'Server',
+    deployNone: 'No Terraria server is running on this host. Use "Join a server" for other servers (if allowed).',
+    deploySub: 'Terraria server on this host',
     ipTitle: 'Join a server (vanilla, TShock, LAN or internet)',
     ipHint: 'IP or domain[:port] (e.g. 192.168.1.20 or play.example.com:7777)',
     badAddr: 'Enter an IP or domain, optionally with :port',
@@ -518,16 +525,34 @@ class LanSection {
 
   constructor(parent: HTMLElement, private cb: MultiplayerSelectCallbacks) {
     const t = L();
-    parent.appendChild(el('h3', undefined, t.lan));
+    // Fork: Server-Deployment (deploy/) — statt LAN-Helfer die Server dieses Hosts anbieten
+    const dep = deployConfig();
+    this.deploy = !!dep;
+    parent.appendChild(el('h3', undefined, dep ? t.deployTitle : t.lan));
     this.statusEl = el('div', 'sw-mp-note');
     parent.appendChild(this.statusEl);
     this.serversEl = el('div');
     this.serversEl.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
     parent.appendChild(this.serversEl);
-    parent.appendChild(el('h3', undefined, t.hostTitle));
     this.hostEl = el('div');
     this.hostEl.style.cssText = 'display:flex; flex-direction:column; gap:8px;';
-    parent.appendChild(this.hostEl);
+    if (dep) {
+      if (!dep.servers.length) this.statusEl.textContent = t.deployNone;
+      for (const sv of dep.servers) {
+        const row = el('div', 'sw-mp-row sw-vpanel-item');
+        const info = el('div', 'info');
+        info.appendChild(el('div', 'n', sv.name));
+        info.appendChild(el('div', 's', t.deploySub));
+        row.appendChild(info);
+        const join = el('button', 'sw-vbtn', t.join) as HTMLButtonElement;
+        join.onclick = () => this.joinTarget(`${sv.host}:${sv.port}`);
+        row.appendChild(join);
+        this.serversEl.appendChild(row);
+      }
+    } else {
+      parent.appendChild(el('h3', undefined, t.hostTitle));
+      parent.appendChild(this.hostEl);
+    }
     this.msgEl = el('div', 'sw-mp-note');
     parent.appendChild(this.msgEl);
     parent.appendChild(el('h3', undefined, t.ipTitle));
@@ -558,10 +583,12 @@ class LanSection {
       }
       parent.appendChild(rr);
     }
+    if (this.deploy) return;   // kein LAN-Helfer im Deployment
     this.renderHost();
     void this.refresh();
     this.timer = setInterval(() => { if (!this.destroyed) void this.refresh(); }, 2000);
   }
+  private deploy = false;
 
   destroy(): void {
     this.destroyed = true;

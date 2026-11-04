@@ -1,0 +1,15 @@
+node_modules
+build
+dist
+dist-*
+ios/build
+ios/*.xcodeproj
+docs
+tests
+logs
+tmp
+shots
+.git
+deploy/.env
+*.log
+Starter_World*.wld

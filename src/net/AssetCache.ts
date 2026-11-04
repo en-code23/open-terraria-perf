@@ -425,7 +425,7 @@ function postToSw(msg: Record<string, unknown>): void {
 export async function primeBootAssets(timeoutMs = 30_000): Promise<boolean> {
   if (typeof navigator === 'undefined' || !navigator.serviceWorker) return false;
   const q = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
-  if (q.has('nosw')) return false;
+  if (q.has('nosw') || import.meta.env.VITE_NO_SW === '1') return false;
   if (!import.meta.env.PROD) return false;
   if (typeof isSecureContext !== 'undefined' && !isSecureContext) return false;
   if (typeof caches === 'undefined') return false;
@@ -581,7 +581,7 @@ function notePipelineDown(reason: string, transient: boolean): void {
 export function assetCacheEnvOff(): boolean {
   if (typeof navigator === 'undefined' || !navigator.serviceWorker) return true;
   const q = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
-  if (q.has('nosw')) return true;
+  if (q.has('nosw') || import.meta.env.VITE_NO_SW === '1') return true;
   if (!q.has('sw') && !import.meta.env.PROD) return true;
   if (typeof isSecureContext !== 'undefined' && !isSecureContext) return true;
   if (typeof caches === 'undefined') return true;
@@ -607,7 +607,7 @@ async function doInitAssetCache(): Promise<void> {
     notePipelineDown('调试旗 ?swfail 模拟:SW 管线不可用', true);
     return;
   }
-  if (q.has('nosw')) { pipelineDown = ''; return; }          // 显式关闭=用户意图,不算失败
+  if (q.has('nosw') || import.meta.env.VITE_NO_SW === '1') { pipelineDown = ''; return; }          // 显式关闭=用户意图,不算失败
   if (!force && !import.meta.env.PROD) { pipelineDown = ''; return; }  // dev 默认关(探针/HMR 零干扰)
   if (typeof isSecureContext !== 'undefined' && !isSecureContext) {
     notePipelineDown('非安全上下文(HTTP)——浏览器禁用 ServiceWorker', false);
