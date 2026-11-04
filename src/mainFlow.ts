@@ -33,7 +33,7 @@ import { VUI } from './vui/VUI';
 import { warmAllAssets } from './net/AssetCache';
 import { gateAssetsOrRun, mountAssetBadge } from './ui/AssetDownloadUI';
 import { TitleMenu } from './ui/TitleMenu';
-import { MultiplayerSelect } from './ui/MultiplayerSelect';
+import { MultiplayerSelect, isLocalNetAddr } from './ui/MultiplayerSelect';
 import { SettingsPanel } from './ui/Settings';
 import { BestiaryPanel } from './ui/BestiaryPanel';
 import { CharSelectPanel } from './ui/CharSelect';
@@ -1531,7 +1531,8 @@ function makeGame(): Game {
       (g as unknown as { pendingJoinItems?: unknown }).pendingJoinItems = diskForm;
       ui.showProgress(Lang.text('Mods.SandboxWorld.Progress.Connecting'), 0.1);
       // Fork: Brücke läuft auf dem Rechner, der das Spiel ausliefert (LAN: iPad/Handy → Mac)
-      const bridgeHost = new URLSearchParams(location.search).get('vbridgehost') ?? (location.hostname || '127.0.0.1');
+      const bhParam = new URLSearchParams(location.search).get('vbridgehost');
+      const bridgeHost = bhParam && isLocalNetAddr(bhParam) ? bhParam : (location.hostname || '127.0.0.1');
       await g.joinVanillaGame(`ws://${bridgeHost.includes(':') && !bridgeHost.startsWith('[') ? `[${bridgeHost}]` : bridgeHost}:${bridgePort}/?host=${encodeURIComponent(host)}&port=${port}${vdump ? `&dump=${vdump}` : ''}`,
         (label, p) => ui.showProgress(label, 0.1 + p * 0.8));
       // 本地角色态回放（joinRoom 非 SSC 同款语义:vanilla 非 SSC 服=客户端权威,

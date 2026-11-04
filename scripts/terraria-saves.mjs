@@ -137,10 +137,25 @@ export function listSaves() {
 
 const strip = ({ p, ...rest }) => rest;   // eslint-disable-line no-unused-vars
 
-/** Connect-Middleware für Vite (dev + preview). */
+const isLoopbackAddr = (a) => /^(127\.|::1$|::ffff:127\.)/.test(String(a ?? ''));
+/** Host-Header muss localhost/IP sein (Schutz gegen DNS-Rebinding fremder Seiten) */
+function hostOk(req) {
+  const h = String(req.headers.host ?? '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
+  return h === 'localhost' || /^[\d.]+$/.test(h) || h.includes(':');
+}
+
+/** Connect-Middleware für Vite (dev + preview) und die Mac-App.
+ *  Nur für diesen Rechner selbst (Loopback) — Spielstände gehen nicht ins Netz.
+ *  TERRARIA_SAVES_LAN=1 erlaubt es auch Geräten im eigenen WLAN (z. B. iPad). */
 export function terrariaSavesMiddleware(req, res, next) {
   const url = new URL(req.url ?? '/', 'http://x');
   if (!url.pathname.startsWith('/__terraria/')) return next();
+  const lanOk = process.env.TERRARIA_SAVES_LAN === '1';
+  if (!hostOk(req) || (!lanOk && !isLoopbackAddr(req.socket?.remoteAddress))) {
+    res.statusCode = 403;
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({ ok: false, error: 'only on this computer' }));
+  }
   const send = (code, body, type = 'application/json') => {
     res.statusCode = code;
     res.setHeader('Content-Type', type);

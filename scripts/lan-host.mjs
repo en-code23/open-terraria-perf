@@ -157,11 +157,43 @@ function status() {
   };
 }
 
+// ---------- Sicherheit ----------
+/** 'loopback' | 'private' | null — nur IP-Literale (+ "localhost"), keine Namensauflösung
+ *  (verhindert Umgehung per DNS-Rebinding / Namen wie "10.evil.com") */
+export function addrKind(h) {
+  const a = String(h ?? '').replace(/^\[|\]$/g, '').toLowerCase();
+  if (a === 'localhost') return 'loopback';
+  const v = net.isIP(a);
+  if (v === 4) {
+    const [x, y] = a.split('.').map(Number);
+    if (x === 127) return 'loopback';
+    if (x === 10 || (x === 192 && y === 168) || (x === 172 && y >= 16 && y <= 31) || (x === 169 && y === 254)) return 'private';
+    return null;
+  }
+  if (v === 6) {
+    if (a === '::1') return 'loopback';
+    const m = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
+    if (m) return addrKind(m[1]);
+    if (/^f[cd]/.test(a) || /^fe[89ab]/.test(a)) return 'private';
+  }
+  return null;
+}
+/** Browser-Herkunft erlaubt? Nur Seiten von localhost / privaten IPs (das Spiel im eigenen
+ *  Netz). Fremde Webseiten (öffentliche Domains) dürfen weder API noch Brücke nutzen.
+ *  Ohne Origin = kein Browser (z. B. curl im eigenen Netz) → erlaubt. */
+function originOk(req) {
+  const o = req.headers.origin;
+  if (!o) return true;
+  try { return addrKind(new URL(o).hostname) !== null; } catch { return false; }
+}
+const fromLoopback = (req) => addrKind(req.socket.remoteAddress) === 'loopback';
+const MAX_LAN_WORLDS = 64;
+
 // ---------- HTTP ----------
 function send(res, code, body, type = 'application/json') {
   res.writeHead(code, {
     'Content-Type': type,
-    'Access-Control-Allow-Origin': '*',
+    ...(res.swOrigin ? { 'Access-Control-Allow-Origin': res.swOrigin, Vary: 'Origin' } : {}),
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Private-Network': 'true',
@@ -180,6 +212,8 @@ function readBody(req, limit) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
+  if (!originOk(req)) { res.writeHead(403); return res.end(); }
+  if (req.headers.origin) res.swOrigin = req.headers.origin;   // CORS nur für erlaubte Herkunft
   try {
     if (req.method === 'OPTIONS') return send(res, 204, '');
     if (url.pathname === '/api/status' && req.method === 'GET') return send(res, 200, status());
@@ -195,6 +229,9 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/upload' && req.method === 'POST') {
       const data = await readBody(req, 200 * 1024 * 1024);
       if (data.length < 64) throw new Error('keine Weltdatei');
+      if (fs.readdirSync(LAN_WORLDS).filter((n) => n.endsWith('.wld')).length >= MAX_LAN_WORLDS && url.searchParams.get('replace') !== '1') {
+        throw new Error(`zu viele LAN-Welten (max. ${MAX_LAN_WORLDS})`);
+      }
       const name = safeName(url.searchParams.get('name'));
       let p = path.join(LAN_WORLDS, `${name}.wld`);
       const inUse = (q) => [...servers.values()].some((x) => x.file === q);
@@ -217,7 +254,17 @@ const server = http.createServer(async (req, res) => {
 });
 
 // ---------- WebSocket-Brücke (RFC 6455, nur Binärframes) ----------
-const isPrivate = (h) => /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|localhost$)/i.test(h);
+/** Ziel erlaubt? Private IP-Literale im eigenen Netz (andere Terraria-Server) mit Port ≥ 1024;
+ *  Loopback (dieser Rechner) nur zu den hier gestarteten Terraria-Servern oder, wenn die
+ *  Anfrage selbst von diesem Rechner kommt — sonst wäre die Brücke ein Tor zu lokalen Diensten. */
+function targetOk(req, host, port) {
+  if (!(Number.isInteger(port) && port >= 1024 && port < 65536) || port === PORT) return false;
+  const k = addrKind(host);
+  if (k === 'private') return true;
+  if (k === 'loopback') return servers.has(port) || fromLoopback(req);
+  return false;
+}
+const MAX_WS_MSG = 4 * 1024 * 1024;   // Terraria-Pakete sind viel kleiner
 
 function wsFrame(payload, opcode = 2) {
   const len = payload.length;
@@ -232,7 +279,7 @@ server.on('upgrade', (req, sock) => {
   const host = url.searchParams.get('host') ?? '127.0.0.1';
   const port = Number(url.searchParams.get('port') ?? 7777);
   const key = req.headers['sec-websocket-key'];
-  if (!key || !isPrivate(host) || !(port > 0 && port < 65536)) { sock.destroy(); return; }
+  if (!key || !originOk(req) || !targetOk(req, host, port)) { sock.destroy(); return; }
   const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
   sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
     + `Sec-WebSocket-Accept: ${accept}\r\n\r\n`);
@@ -248,14 +295,17 @@ server.on('upgrade', (req, sock) => {
   tcp.on('error', closeBoth);
   let buf = Buffer.alloc(0);
   let frag = [];
+  let fragLen = 0;
   sock.on('data', (d) => {
     buf = Buffer.concat([buf, d]);
+    if (buf.length > MAX_WS_MSG + 16) { closeBoth(); sock.destroy(); return; }
     for (;;) {
       if (buf.length < 2) return;
       const fin = buf[0] & 0x80, op = buf[0] & 0x0f, masked = buf[1] & 0x80;
       let len = buf[1] & 0x7f, off = 2;
       if (len === 126) { if (buf.length < 4) return; len = buf.readUInt16BE(2); off = 4; }
       else if (len === 127) { if (buf.length < 10) return; len = Number(buf.readBigUInt64BE(2)); off = 10; }
+      if (len > MAX_WS_MSG || fragLen + len > MAX_WS_MSG) { closeBoth(); sock.destroy(); return; }
       const mOff = off; if (masked) off += 4;
       if (buf.length < off + len) return;
       const payload = Buffer.from(buf.subarray(off, off + len));
@@ -265,9 +315,10 @@ server.on('upgrade', (req, sock) => {
       if (op === 9) { sock.write(wsFrame(payload, 10)); continue; }
       if (op === 10) continue;
       frag.push(payload);
+      fragLen += len;
       if (!fin) continue;
       const msg = frag.length === 1 ? frag[0] : Buffer.concat(frag);
-      frag = [];
+      frag = []; fragLen = 0;
       if (tcpReady) tcp.write(msg); else pending.push(msg);
     }
   });

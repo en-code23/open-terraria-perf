@@ -398,11 +398,24 @@ interface LanServerInfo { port: number; name: string; ready: boolean; generating
 interface LanWorldInfo { file: string; name: string; source: 'browser' | 'terraria'; bytes: number; mtime: number }
 interface LanStatus { ok: boolean; terraria: boolean; ips: string[]; servers: LanServerInfo[]; worlds: LanWorldInfo[] }
 
+/** Fork: nur IP-Literale aus dem eigenen Netz (127/10/172.16-31/192.168, ::1, fc/fd, fe80) */
+export function isLocalNetAddr(h: string): boolean {
+  const a = h.replace(/^\[|\]$/g, '').toLowerCase();
+  if (a === 'localhost' || a === '::1') return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(a);
+  if (m) {
+    const [x, y] = [Number(m[1]), Number(m[2])];
+    return x === 127 || x === 10 || (x === 192 && y === 168) || (x === 172 && y >= 16 && y <= 31) || (x === 169 && y === 254);
+  }
+  return /^(f[cd]|fe[89ab])[0-9a-f]*:/.test(a);
+}
 function helperBase(): string {
   const q = new URLSearchParams(location.search);
-  const host = q.get('lanhost') ?? (location.hostname || '127.0.0.1');
+  const p = q.get('lanhost');
+  const host = p && isLocalNetAddr(p) ? p : (location.hostname || '127.0.0.1');
+  const port = /^\d{2,5}$/.test(q.get('vbridge') ?? '') ? q.get('vbridge')! : '5290';
   const h = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
-  return `http://${h}:${q.get('vbridge') ?? '5290'}`;
+  return `http://${h}:${port}`;
 }
 
 let mpStyleDone = false;

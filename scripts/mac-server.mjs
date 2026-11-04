@@ -28,7 +28,8 @@ const server = http.createServer((req, res) => {
     // kein Service Worker in der App (Dateien liegen lokal; der SW erwartet Zip-Pakete)
     if (rel === '/sw.js') { res.statusCode = 404; return res.end(); }
     let file = path.join(root, rel);
-    if (!file.startsWith(root)) { res.statusCode = 403; return res.end(); }
+    const r2 = path.relative(root, file);
+    if (r2.startsWith('..') || path.isAbsolute(r2)) { res.statusCode = 403; return res.end(); }
     try { if (fs.statSync(file).isDirectory()) file = path.join(file, 'index.html'); } catch { /* fehlt */ }
     fs.stat(file, (err, st) => {
       if (err || !st.isFile()) {
