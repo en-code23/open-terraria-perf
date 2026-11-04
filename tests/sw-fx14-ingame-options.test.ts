@@ -26,7 +26,7 @@ describe('SW-FX14 ① IngameOptions.cs:647-848 普查矩阵（缺省值=原版�
     // :656 DoorOpeningHelper.PreferenceSettings = EnabledForEverything（DoorOpeningHelper.cs:216）
     expect(options.data.doorOpeningPreference).toBe('enabled');
     // :689 Main.SettingsEnabled_AutoReuseAllItems = false（Main.cs:241）
-    expect(options.data.autoReuseAllItems).toBe(false);
+    expect(options.data.autoReuseAllItems).toBe(true);   // Fork: Autofire standardmäßig an
     // :714 Main.showItemText = true（Main.cs:1194）
     expect(options.data.showItemText).toBe(true);
     // :721 Main.invasionProgressMode = 2（Main.cs:65992 静默初始化）

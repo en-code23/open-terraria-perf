@@ -411,12 +411,14 @@ export class UIWorldLoadState extends UIState {
       text = wrapText(text, half);
       if (text.split('\n').length > 2) text = wrapText(text, half * 1.5 - 50);
       const scale = TIP_SCALE;
-      const vecW = PixelText.measure(text) * scale;
+      const vecW = Math.max(...text.split('\n').map((l) => PixelText.measure(l))) * scale;   // Fork: breiteste Zeile
       const lines = text.split('\n').length;
       const vecH = lines * 16 * scale;
       const drawScale = vecH > TIP_MAX_H ? TIP_MAX_H / vecH : 1;   // :156-159 高度超阈收縮
       const px = d.width * anchorX - vecW * 0.5;            // :161-162 中心锚定
-      const py = y - vecH * 0.5;
+      // Fork: niedrige Bildschirme (Handy quer) — Tipp unter den Ladebalken an den unteren
+      // Rand, sonst überdeckt er die Statuszeile („Welt wird geglättet – 80 %“)
+      const py = d.height < 600 ? d.height - 8 - vecH * drawScale : y - vecH * 0.5;
       // ★IIIII243 实绘 bbox 回写（收缩形态两轴同乘 num4,vanilla position-=vector*num4*0.5 同构）
       const r: GenRect = { x: px, y: py, w: vecW * drawScale, h: vecH * drawScale };
       this.tipRect = this.tipRect
@@ -426,15 +428,16 @@ export class UIWorldLoadState extends UIState {
             h: Math.max(this.tipRect.y + this.tipRect.h, r.y + r.h) - Math.min(this.tipRect.y, r.y),
           }
         : r;
-      if (drawScale !== 1) {
-        // 收縮形态罕见（超 5 行长提示）：逐行缩放绘制
+      // Fork: immer zeilenweise und je Zeile zentriert zeichnen (fillText kennt kein '\n' →
+      // vorher lief der ganze Tipp als eine Zeile über den Bildschirmrand)
+      {
         let ly = py;
+        const cx = px + vecW * 0.5;
         for (const line of text.split('\n')) {
-          batch.drawString(line, px, ly, color, scale * drawScale);
+          const lw = PixelText.measure(line) * scale * drawScale;
+          batch.drawString(line, cx - lw * 0.5, ly, color, scale * drawScale);
           ly += 16 * scale * drawScale;
         }
-      } else {
-        batch.drawString(text, px, py, color, scale);
       }
     }
   }
@@ -497,12 +500,25 @@ function smoothStep(a: number, b: number, t: number): number {
 function wrapText(text: string, maxWidth: number): string {
   if (PixelText.measure(text) <= maxWidth) return text;
   const lines: string[] = [];
-  let line = '';
-  for (const ch of text) {
-    if (ch === '\n') { lines.push(line); line = ''; continue; }
-    if (line && PixelText.measure(line + ch) > maxWidth) { lines.push(line); line = ch; }
-    else line += ch;
+  // Fork: an Wortgrenzen umbrechen (Leerzeichen); Wörter ohne Leerzeichen (CJK) zeichenweise
+  for (const para of text.split('\n')) {
+    let line = '';
+    const tokens = para.match(/\S+\s*|\s+/g) ?? [''];
+    for (const tok of tokens) {
+      if (line && PixelText.measure(line + tok.trimEnd()) > maxWidth) {
+        lines.push(line.trimEnd());
+        line = '';
+      }
+      if (!line && PixelText.measure(tok.trimEnd()) > maxWidth) {
+        for (const ch of tok) {
+          if (line && PixelText.measure(line + ch) > maxWidth) { lines.push(line); line = ch; }
+          else line += ch;
+        }
+        continue;
+      }
+      line += tok;
+    }
+    lines.push(line.trimEnd());
   }
-  if (line) lines.push(line);
   return lines.join('\n');
 }

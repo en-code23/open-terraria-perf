@@ -14,6 +14,8 @@ import type { Game } from '../core/Game';
 import { ITEM_DEFS, ITEM_BY_KEY, VANILLA_ITEM_KEY_BY_ID } from '../data/items';
 import { TILE_DEFS } from '../data/tiles';
 import { TownNPC } from '../entities/TownNPC';
+import { hookItemOf } from '../data/grappleHooks';
+import { mountOfItem, isCartMount } from '../entities/Mounts';
 import { itemFuncOfVid } from '../data/vanillaItemFunc';
 
 import { Lang } from '../i18n/Lang';
@@ -590,6 +592,8 @@ export class MobileControls {
   private quickBtn: HTMLElement | null = null;
   private hookBtn: HTMLElement | null = null;
   private mountBtn: HTMLElement | null = null;
+  private buffBtn: HTMLElement | null = null;
+  private talkBtn: HTMLElement | null = null;
   private lastSel = 0;
   private prevSel = 1;
   private quickFaceKey = '';
@@ -952,6 +956,7 @@ export class MobileControls {
     // Interagieren (NPC ansprechen / Truhe, Tür … vor dem Spieler)
     const talk = add(this.mkBtn('sw-mact sw-mtalk', 'green', 'person'));
     this.bindBtn(talk, () => this.interact());
+    this.talkBtn = talk;
     // Reittier
     const mount = add(this.mkBtn('sw-mact sw-mmount', 'round'));
     this.setItemIcon(mount, 2430, 'jump');
@@ -965,7 +970,9 @@ export class MobileControls {
       if (c) g.input.tapVirtual(c);
     });
     // Schnell-Buff
-    this.holdAction(add(this.mkBtn('sw-mact sw-mbuff', 'sq', 'buff')), 'QuickBuff');
+    const buff = add(this.mkBtn('sw-mact sw-mbuff', 'sq', 'buff'));
+    this.holdAction(buff, 'QuickBuff');
+    this.buffBtn = buff;
   }
 
   /** Interagieren: nächster Stadt-NPC in Reichweite → ansprechen; sonst Rechtsklick
@@ -1098,8 +1105,8 @@ export class MobileControls {
     const key = url ? `${this.prevSel}:${it!.id}` : 'none';
     if (key === this.quickFaceKey) return;
     this.quickFaceKey = key;
-    if (url) { this.setTex(b, url); b.classList.remove('off'); }
-    else { this.setIcon(b, 'ring'); b.classList.add('off'); }
+    if (url) { this.setTex(b, url); b.style.display = ''; }
+    else { b.style.display = 'none'; }   // Fork: nichts zum Wechseln → Knopf aus
   }
 
   private refresh(): void {
@@ -1119,19 +1126,34 @@ export class MobileControls {
     this.useFace(held ? held.id : -1);
     this.quickFaceKey = this.quickFaceKey === 'none' ? '' : this.quickFaceKey;
     this.refreshQuick();
-    // 药水：有治疗药水 → 显示；受伤时亮起
-    let hasHeal = false;
-    for (const s of g.player.inv.slots) {
+    // Fork: Knöpfe nur zeigen, wenn man das passende Item hat (wie die Mobil-App)
+    const inv = g.player.inv;
+    const vidOf = (it: { id: number } | null | undefined): number => (it ? ITEM_DEFS[it.id]?.vid ?? -1 : -1);
+    const isMount = (v: number): boolean => { const m = mountOfItem(v); return m >= 0 && !isCartMount(m); };
+    let hasHeal = false, hasHook = !!hookItemOf(vidOf(inv.miscEquips[4])), hasMount = isMount(vidOf(inv.miscEquips[3])), hasBuff = false;
+    for (const s of inv.slots) {
       if (!s) continue;
-      const ff = itemFuncOfVid(ITEM_DEFS[s.id]?.vid ?? -1);
-      if (ff?.consumable && ff.healLife && !ff.createTile && !ff.shoot && !ff.pick && !ff.axe && !ff.hammer) {
-        hasHeal = true;
-        break;
-      }
+      const v = vidOf(s);
+      const ff = itemFuncOfVid(v);
+      if (ff?.consumable && ff.healLife && !ff.createTile && !ff.shoot && !ff.pick && !ff.axe && !ff.hammer) hasHeal = true;
+      if (ff?.consumable && typeof ff.buffType === 'number' && ff.buffType > 0 && !ff.healLife && !ff.healMana) hasBuff = true;
+      if (!hasHook && hookItemOf(v)) hasHook = true;
+      if (!hasMount && isMount(v)) hasMount = true;
     }
+    const show = (el: HTMLElement | null, on: boolean) => { if (el) el.style.display = on ? '' : 'none'; };
+    show(this.potionBtn, hasHeal);
+    show(this.hookBtn, hasHook);
+    show(this.mountBtn, hasMount || !!(g.player as unknown as { ridingMount?: unknown }).ridingMount);
+    show(this.buffBtn, hasBuff);
+    // Interagieren nur in der Nähe eines Stadt-NPCs
+    let npcNear = false;
+    for (const n of g.entities.npcs) {
+      if (n instanceof TownNPC && !n.dead && Math.hypot(n.cx - g.player.cx, n.cy - g.player.cy) < 8 * 16) { npcNear = true; break; }
+    }
+    show(this.talkBtn, npcNear);
     if (this.potionBtn) {
       this.potionBtn.classList.toggle('lit', hasHeal && g.player.hp < g.player.maxHp);
-      this.potionBtn.classList.toggle('off', !hasHeal || g.player.buffs.healBlocked);
+      this.potionBtn.classList.toggle('off', g.player.buffs.healBlocked);
     }
     if (this.smartBtn) this.smartBtn.classList.toggle('on', !!g.smartCursor.wanted);
     this.root.classList.toggle('net', !!g.net?.active && g.spectatingSlot < 0);

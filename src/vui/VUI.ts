@@ -1,6 +1,7 @@
 // VUI 根控制器：ui-canvas 管理、帧循环挂接、鼠标输入、光标绘制。
 // 用法：VUI.init(parent) → await VUI.ready() → VUI.setState(new XxxState())
 // 帧循环：菜单期由 main.ts 的 rAF 驱动 VUI.frame(dt)；进游戏后挂 Game 渲染末尾。
+import { lowMemoryMode } from '../core/lowMemory';
 import { UserInterface } from './core/UserInterface';
 import type { UIState } from './core/UIState';
 import { UIScale } from './draw/UIScale';
@@ -127,7 +128,8 @@ export class VUI {
     // 坐标系恒更新;画布尺寸只在全屏模式重设(光标独占模式 = 80×80 跟随
     // 鼠标,与窗口尺寸无关,resize 不得把它吹回全屏)
     const cssW = window.innerWidth, cssH = window.innerHeight;
-    const dpr = window.devicePixelRatio || 1;
+    // Fork: Sparmodus — UI-Leinwand höchstens 2× (3× = 2,25-fache Fläche auf iPhones)
+    const dpr = Math.min(window.devicePixelRatio || 1, lowMemoryMode() ? 2 : 99);
     UIScale.resize(cssW, cssH, dpr);
     if (VUI.cursorOnly) return;
     const c = VUI.canvas;

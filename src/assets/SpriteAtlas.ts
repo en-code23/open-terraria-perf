@@ -275,7 +275,10 @@ export class SpriteAtlas {
    *  createImageBitmap = 自持已解码像素(原版 Texture2D 语义):绘制永不重解码,
    *  close() = Dispose。?bitmap=0 走旧 Image 路径(逃生门) */
   static readonly USE_BITMAP = typeof createImageBitmap === 'function'
-    && !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('bitmap') && location.search.includes('bitmap=0'));
+    && !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('bitmap') && location.search.includes('bitmap=0'))
+    // Fork: Sparmodus (iPhone/iPad) — ImageBitmaps sind unter iOS nicht auslagerbar;
+    // normale Bilder darf WebKit bei Speicherdruck verwerfen und neu dekodieren
+    && !(lowMemoryMode() && !(typeof location !== 'undefined' && location.search.includes('bitmap=1')));
   vimages = new Map<string, ImageBitmap | HTMLImageElement>(); // 原版 PNG（干净像素，不做 hardAlpha）
   /** UI 贴图（vanilla-ui/，干净像素不 hardAlpha——UI 有抗锯齿边缘） */
   uiimages = new Map<string, ImageBitmap | HTMLImageElement>();

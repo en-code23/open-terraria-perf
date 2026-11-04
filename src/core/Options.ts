@@ -326,6 +326,10 @@ export interface OptionsData {
   forkClassicDialog?: boolean;
   /** Fork: Touch-Geräte einmalig auf waagerechte Leisten (wie die Mobil-App) */
   forkMobileBars?: boolean;
+  /** Fork: Karte einmalig auf Nebel umgestellt */
+  forkMapFog?: boolean;
+  /** Fork: Autofire einmalig eingeschaltet */
+  forkAutofire?: boolean;
   /** ★后台继续运行（2026-09-28 用户需求:后台挂机——切后台 rAF 停发=世界冻结的
    *  Web 缺口;原版无对应物=Web 便利档,缺省开）。消费=Game.onPumpMsg 泵门四条件
    *  之一（document.hidden ∧ 本开关 ∧ playWhenUnfocused ∧ !paused → fixedUpdate
@@ -389,7 +393,7 @@ export class OptionsStore {
     keybinds: {},
     reversedUpDownArmorSetBonuses: false,   // Main.cs:253
     doorOpeningPreference: 'enabled',       // DoorOpeningHelper.cs:216
-    autoReuseAllItems: false,               // Main.cs:241
+    autoReuseAllItems: true,   // Fork: Dauerfeuer standardmäßig an (Mobil-App-Komfort)               // Main.cs:241
     showItemText: true,                     // Main.cs:1194
     builderAutoActuatorDisabled: false,     // builderAccStatus[2]=0（启用）
     builderAutoPaintDisabled: false,        // builderAccStatus[3]=0（启用）
@@ -429,7 +433,7 @@ export class OptionsStore {
     craftingGridControl: 'modern',           // ★SW-FX41 缺省回切原版缺省 Modern(Player.cs:363;FX30 偏差备案清偿)
     inventoryLayout: 'vanilla',             // ★SW-FX39(2026-09-11)缺省转正(原版布局;旧自创退 ?invlayout=legacy 回退旗)
     fpsDisplay: false,                      // ★BJ305 帧率显示缺省关（用户明令新功能）
-    mapXray: true,                          // Fork: Vollbildkarte ohne Nebel
+    mapXray: false,                         // Fork: Karte mit Nebel wie im Original (X-Ray optional)
     backgroundRun: true,                    // ★后台继续运行缺省开（2026-09-28 用户需求后台挂机;与 playWhenUnfocused 组合门见 Game 泵域注）
   };
   loaded = false;
@@ -628,7 +632,11 @@ export class OptionsStore {
       }
       // ★BJ305 帧率显示：坏值回缺省「关」（布尔卫门,同 playWhenUnfocused 等家族判式）
       if (typeof this.data.fpsDisplay !== 'boolean') this.data.fpsDisplay = false;
-      if (typeof this.data.mapXray !== 'boolean') this.data.mapXray = true;
+      if (typeof this.data.mapXray !== 'boolean') this.data.mapXray = false;
+      // Fork: einmalig zurück auf Nebel (vorher war X-Ray Standard → man sah alle Höhlen)
+      if (this.data.forkMapFog !== true) { this.data.mapXray = false; this.data.forkMapFog = true; }
+      // Fork: einmalig Dauerfeuer (Autofire) einschalten
+      if (this.data.forkAutofire !== true) { this.data.autoReuseAllItems = true; this.data.forkAutofire = true; }
       // Fork: bestehende Einstellungen einmalig auf den klassischen Dialog umstellen
       if (this.data.forkClassicDialog !== true) { this.data.dialoguePortraitMode = 'disabled'; this.data.forkClassicDialog = true; }
       if (!['classic', 'fancy', 'bars'].includes(this.data.resourceBarStyle)) this.data.resourceBarStyle = 'fancy';

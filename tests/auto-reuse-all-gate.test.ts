@@ -16,8 +16,12 @@ const defOf = (vid: number) => ({ key: `vi_${vid}_t`, vid });
 
 describe('autoReuseAllChain（TryAllowingItemReuse Player.cs:53550）', () => {
   it('默认关：任何物品不经全局档连发（Main.cs:241 默认 false）', () => {
-    expect(options.data.autoReuseAllItems).toBe(false);
-    for (const v of [39, 96, 1130, 2366, 949, 166]) expect(chain(v)).toBe(false);
+    // Fork: Standard ist jetzt AN (Autofire) — Logik bei ausgeschalteter Option weiter geprüft
+    expect(options.data.autoReuseAllItems).toBe(true);
+    options.data.autoReuseAllItems = false;
+    try {
+      for (const v of [39, 96, 1130, 2366, 949, 166]) expect(chain(v)).toBe(false);
+    } finally { options.data.autoReuseAllItems = true; }
   });
   it('开启：damage>0 各武器类连发；damage 0 件拒（原版 sItem.damage > 0 门）', () => {
     options.data.autoReuseAllItems = true;
@@ -41,7 +45,7 @@ describe('autoReuseAllChain（TryAllowingItemReuse Player.cs:53550）', () => {
       expect(itemCombat(1991)?.damage ?? 0).toBe(0);
       expect(chain(1991)).toBe(false);
       expect(chain(5129)).toBe(true);   // damage 15>0：全局档连发=原版同相
-    } finally { options.data.autoReuseAllItems = false; }
+    } finally { options.data.autoReuseAllItems = true; }
   });
   it('分支归类锚：补接门的 vid 确实落在对应分支', () => {
     expect(itemCombat(39)?.useAmmo).toBe(40);               // ranged 分支 useAmmo 门

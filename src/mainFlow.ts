@@ -231,6 +231,8 @@ export function createFlow(root: HTMLElement, atlas: SpriteAtlas | null, ui: UI,
         const m = await import('./assets/AssetGen');
         m.prepareIconAtlas(icons);
         m.buildAssets();   // 图集 putImageData 一次 + sheets/角色/敌怪(遗留主线程段)
+        // Fork: Sparmodus — Icon-Worker sofort beenden (wird bei Bedarf neu gestartet)
+        if (lowMemoryMode() && flowGenClient === c) { c.terminate(); flowGenClient = null; }
       } catch (e) {
         console.warn('[assetPrewarm] 预热失败(回退主线程同步生成):', String(e).slice(0, 120));
         const m = await import('./assets/AssetGen');
@@ -1868,8 +1870,10 @@ function makeGame(): Game {
     await startAssetPrewarm();
     const g = abortGame = makeGame();   // ★IIIII229 ① 中止路由目标
     // 生成期预览位图 A/B(?wprev=0,2026-08-28 量化:60 passes × ~20 万像素扫描)
+    // Fork: standardmäßig AUS — wie im Original keine Kartenvorschau (sonst sieht man,
+    // wo was liegt); ?wprev=1 schaltet sie wieder ein
     const wantPreview = (() => {
-      try { return new URLSearchParams(location.search).get('wprev') !== '0'; } catch { return true; }
+      try { return new URLSearchParams(location.search).get('wprev') === '1'; } catch { return false; }
     })();
     try {
       await g.newWorld(seedFinal, cfg.w, cfg.h,
@@ -2019,6 +2023,9 @@ function makeGame(): Game {
     // ★BJ280：回标题清拦截态（标题界面永不 dirty;覆盖 quitToMenu 保存失败仍退出
     // 的路径——原版失败可离开语义,拦截面随之解除）
     worldDirty = false;
+    // Fork: Sparmodus — Icons/Grafiken schon im Menü vorbereiten, damit diese Speicherspitze
+    // nicht mit dem Start der Weltgenerierung zusammenfällt (iPhone: ~1,5 GB-Grenze)
+    if (lowMemoryMode() && !prewarmPromise) setTimeout(() => { if (!game) void startAssetPrewarm(); }, 5000);
     // ★vanilla interop 自动加入（?vanilla=host:port;仅首启触发一次,失败回标题）
     if (!vanillaAutoJoined) {
       const vp = new URLSearchParams(location.search).get('vanilla');
@@ -2117,7 +2124,7 @@ function makeGame(): Game {
   function installLegacyShim() {
     if (legacyShim) return;
     const div = document.createElement('div');
-    div.style.cssText = 'position:absolute;left:0;top:0;width:2px;height:2px;opacity:0.01;z-index:1;';
+    div.style.cssText = 'position:absolute;left:0;top:0;width:2px;height:2px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;z-index:1;';   // Fork: unsichtbar (iOS zeigte den Text blass oben links)
     const sel = document.createElement('select');
     sel.innerHTML = '<option value="4200x1200">小</option><option value="6400x1800" selected>中</option><option value="8400x2400">大</option>';
     const btn = document.createElement('button');
@@ -2439,7 +2446,10 @@ function makeGame(): Game {
       console.error('save failed', e);
       ui.toast(Lang.text('Mods.SandboxWorld.Toast.SaveFailedStorage'));
       return false;
-    }).finally(() => { saveInFlight = false; });   // ★BJ280：在途标志解除（成败皆清）
+    }).finally(() => {
+      saveInFlight = false;   // ★BJ280：在途标志解除（成败皆清）
+      if (lowMemoryMode()) saveClient.releaseIfIdle();   // Fork: Sparmodus — Speicher-Worker freigeben
+    });
   }
 
   /** ★BJ605 用户明令件（「如果本地存档无法成功，也应当改为自动导出存档提供下载」）：
@@ -2521,6 +2531,7 @@ function makeGame(): Game {
   (window as unknown as { __swFlow?: unknown }).__swFlow = {
     newWorld: (seed: string, w: number, h: number) => newWorld(seed, w, h),
     blankWorld: (w: number, h: number) => blankWorld(w, h),   // 空白世界直通道（导演/探针：免 worldgen 秒进）
+    prewarmAssets: () => startAssetPrewarm(),   // Fork: Speicher-Diagnose (iPhone)
     quickLoad,
     importWld,
     quitToMenu,

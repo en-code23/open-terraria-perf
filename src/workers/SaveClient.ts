@@ -318,6 +318,11 @@ export class SaveClient {
    *  链槽 this.chain 兑现后仍钉最近一份存档 JSON 字符串（单槽、跨轮不增长），
    *  一并归零。调用点=quitToMenu（await doSave 全链落定之后，无在途作业；
    *  在途作业防御性 reject 走同步回退，与 worker-fatal 同形）。 */
+  /** Fork: Sparmodus — Worker beenden, wenn gerade nichts zu tun ist */
+  releaseIfIdle(): void {
+    if (this.pending.size === 0) this.release();
+  }
+
   release(): void {
     if (this.worker) {
       const w = this.worker;

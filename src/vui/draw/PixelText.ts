@@ -34,6 +34,10 @@ export const PixelText = {
   measure(text: string): number {
     if (typeof document === 'undefined') return text.length * BASE_PX;
     const ctx = PixelText.sharedCtx();
+    // Fork: Schrift bei jeder Messung neu setzen — Safari/iOS behält sonst die Ersatzschrift,
+    // wenn die Messfläche vor dem Laden der Webfont angelegt wurde (Text wird breiter
+    // gezeichnet als gemessen → kein Umbruch, z. B. Tipps beim Weltladen)
+    ctx.font = `${BASE_PX}px ${UI_FONT}`;
     return ctx.measureText(text).width;
   },
 

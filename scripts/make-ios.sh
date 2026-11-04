@@ -24,11 +24,27 @@ fi
 mkdir -p "$GAME"
 
 command -v xcodegen >/dev/null || { echo "xcodegen fehlt: brew install xcodegen"; exit 1; }
+# Signier-Team: OT_TEAM=… oder automatisch aus dem „Apple Development“-Zertifikat im Schlüsselbund
+if [ -z "${OT_TEAM:-}" ]; then
+  OT_TEAM="$(security find-certificate -c "Apple Development" -p 2>/dev/null | openssl x509 -noout -subject 2>/dev/null | sed -n 's/.*OU=\([A-Z0-9]*\).*/\1/p' | head -1 || true)"
+fi
+export OT_TEAM
+[ -n "$OT_TEAM" ] && echo "[ios] Signier-Team: $OT_TEAM"
 (cd "$IOS" && xcodegen generate --quiet)
 echo "[ios] Projekt: $IOS/OpenTerraria.xcodeproj"
 
 DD="$IOS/build/dd"
 case "$MODE" in
+  device)
+    # aufs angeschlossene iPhone installieren und starten (Debug, eigenes Team)
+    xcodebuild -project "$IOS/OpenTerraria.xcodeproj" -scheme OpenTerraria -configuration Debug \
+      -sdk iphoneos -derivedDataPath "$DD" -allowProvisioningUpdates DEVELOPMENT_TEAM="$OT_TEAM" -quiet build
+    APP="$DD/Build/Products/Debug-iphoneos/Terraria.app"
+    DEV="${OT_DEVICE:-$(xcrun devicectl list devices 2>/dev/null | awk '/physical/ && /connected/ && /iPhone|iPad/ {for(i=1;i<=NF;i++) if ($i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$/) print $i}' | head -1)}"
+    [ -n "$DEV" ] || { echo "kein iPhone/iPad angeschlossen"; exit 1; }
+    xcrun devicectl device install app --device "$DEV" "$APP"
+    echo "[ios] installiert auf $DEV"
+    ;;
   sim)
     xcodebuild -project "$IOS/OpenTerraria.xcodeproj" -scheme OpenTerraria -configuration Release \
       -sdk iphonesimulator -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO -quiet build

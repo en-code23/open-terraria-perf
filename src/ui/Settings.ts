@@ -121,6 +121,49 @@ const CSS = `
 .sw-kb-reset { padding: 4px 10px; flex: none; }
 .sw-kb-unbound { color: #8a90b8; }
 .sw-kb-listening { color: #ffe8a0; outline: 1px solid #ffd76e; }
+/* ---- Fork v2: Aufbau wie das Original-Einstellungsmenü (IngameOptions): Titel oben,
+   zwei getrennte Panels — links große, zentrierte Kategorien (gelb = aktiv), rechts
+   zentrierte Zeilen „Bezeichnung: Wert“ mit Original-Schiebereglern ---- */
+.sw-set-panel { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0;
+  width: min(940px, 96vw); }
+.sw-set-title { font-size: 22px; margin-bottom: 10px; color: #fff; }
+.sw-set-body { gap: 18px; min-height: min(68vh, 540px); align-items: stretch; }
+.sw-set-cats, .sw-set-content { background: rgba(63,82,151,.88); border: 2px solid #000; border-radius: 12px;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.07), 0 6px 30px rgba(0,0,0,.35); }
+.sw-set-cats { width: auto; flex: 0 0 42%; padding: 16px 10px; justify-content: center; align-items: center; gap: 2px; }
+.sw-set-cats div { text-align: center; font-size: 34px; line-height: 1.25; transform-origin: center; padding: 1px 8px;
+  color: rgb(200,200,200); }
+.sw-set-cats div.sw-set-extra, .sw-set-cats div.sw-set-close { margin-top: 0; }
+.sw-set-content { flex: 1 1 0; padding: 20px 18px; gap: 12px; max-height: calc(100vh - 90px); justify-content: flex-start; }
+.sw-set-footer { display: none; }
+.sw-set-row { justify-content: center; font-size: 19px; color: #fff;
+  text-shadow: 2px 0 0 #000,-2px 0 0 #000,0 2px 0 #000,0 -2px 0 #000; }
+.sw-set-row > span:first-child { width: auto; flex: 0 1 auto; text-align: right; color: #fff; }
+/* Schieberegler-Zeilen: feste Spalten → Regler stehen bündig untereinander */
+.sw-set-row:has(.sw-vslider) { justify-content: flex-start; }
+.sw-set-row:has(.sw-vslider) > span:first-child { flex: 0 0 38%; }
+/* Touch-Knöpfe unter dem Einstellungsmenü ausblenden */
+body:has(.sw-set-panel) .sw-mobile { visibility: hidden; }
+.sw-set-row .val { order: 1; width: 3.4em; text-align: left; color: #fff; margin-left: -4px; }
+.sw-set-row .sw-vslider { order: 2; }
+.sw-set-row input[type=checkbox] { display: none; }
+.sw-set-row .state { color: #fff; }
+label.sw-set-row { cursor: pointer; }
+label.sw-set-row:hover, label.sw-set-row:hover > span { color: rgb(255,231,69); }
+.sw-set-row .sw-set-mode { background: none; border: 0; padding: 0 !important; font-size: inherit; color: #fff;
+  text-shadow: inherit; cursor: pointer; font-family: inherit; }
+.sw-set-row .sw-set-mode:hover { color: rgb(255,231,69); background: none; }
+.sw-set-row .sw-set-mode:disabled { color: #aab; }
+@media (max-height: 560px) {
+  .sw-set-panel { width: min(940px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right))); }
+  .sw-set-title { font-size: 18px; margin-bottom: 6px; }
+  .sw-set-body { min-height: 0; height: calc(100vh - 56px); height: calc(100dvh - 56px); gap: 12px; }
+  .sw-set-cats { padding: 8px 6px; }
+  .sw-set-cats div { font-size: 26px; line-height: 1.18; }
+  .sw-set-content { padding: 12px 12px; gap: 9px; max-height: none; overflow-y: auto; }
+  .sw-set-row { font-size: 17px; }
+  .sw-vslider { --vs: 1.15; }
+}
 `;
 
 /** Utils.CycleControlControl_OffOnClickHold（Utils.cs:159-176）一比一——1457 相机
@@ -208,6 +251,14 @@ export class SettingsPanel {
       div.addEventListener('click', () => { this.cat = c; this.build(); });
       cats.appendChild(div);
     }
+    {
+      const de = (Lang.activeCultureName ?? '').startsWith('de');
+      const close = document.createElement('div');
+      close.className = 'sw-set-close';
+      close.textContent = de ? 'Menü schließen' : 'Close Menu';
+      close.addEventListener('click', () => { UISfx.click(); (this.panel.querySelector('.sw-set-back') as HTMLElement | null)?.click(); });
+      cats.appendChild(close);
+    }
     for (const a of this.flow.extraActions ?? []) {
       const div = document.createElement('div');
       div.className = 'sw-set-extra';
@@ -243,7 +294,7 @@ export class SettingsPanel {
     const val = document.createElement('span');
     val.className = 'val';
     // Fork: Werte > 1.5 (z. B. Langdruck in ms) direkt anzeigen statt ×100
-    const fmt = (v: number) => String(max > 1.5 ? Math.round(v) : Math.round(v * 100));
+    const fmt = (v: number) => (max > 1.5 ? String(Math.round(v)) : `${Math.round(v * 100)}%`);
     val.textContent = fmt(get());
     input.addEventListener('input', () => {
       const v = Number(input.value);
@@ -266,8 +317,14 @@ export class SettingsPanel {
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.checked = get();
-    input.addEventListener('change', () => set(input.checked));
-    row.append(span, input);
+    // Fork: wie im Original als Text „Bezeichnung: An/Aus“ (Kästchen ausgeblendet)
+    const de = (Lang.activeCultureName ?? '').startsWith('de');
+    const state = document.createElement('span');
+    state.className = 'state';
+    const show = () => { state.textContent = input.checked ? (de ? 'An' : 'On') : (de ? 'Aus' : 'Off'); };
+    show();
+    input.addEventListener('change', () => { set(input.checked); show(); });
+    row.append(span, input, state);
     return row;
   }
 
@@ -282,8 +339,7 @@ export class SettingsPanel {
     const span = document.createElement('span');
     span.textContent = label;
     const btn = document.createElement('button');
-    btn.className = 'sw-set-back';
-    btn.style.padding = '4px 14px';
+    btn.className = 'sw-set-back sw-set-mode';   // Fork: als Text wie im Original
     btn.textContent = value();
     if (opts?.disabled) {
       btn.disabled = true;

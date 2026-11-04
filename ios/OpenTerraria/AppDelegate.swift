@@ -17,6 +17,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // Spielsound auch bei anderer Musik; Stummschalter wird beachtet (wie das Original)
         try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
+        OTLog.rotate()
+        OTLog.write("Start \(UIDevice.current.model) iOS \(UIDevice.current.systemVersion)")
         AppDelegate.server.start()
         return true
     }
@@ -48,6 +50,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {
+        OTLog.write("Hintergrund")
         UIApplication.shared.isIdleTimerDisabled = false
         (window?.rootViewController as? GameViewController)?.saveNow()
     }

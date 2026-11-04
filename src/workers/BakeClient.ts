@@ -10,6 +10,7 @@
 // 双路径纪律：旗关（缺省）时 Game 不装配本客户端 → ChunkCache 全部支路失效,
 // 主线程烘焙链零改动。两路产物一致性由 scripts/_wbake-digest.mjs（md5 对拍）
 // 与 tests/wbake-*.test.ts（协议/账本锁）把门。
+import { lowMemoryMode } from '../core/lowMemory';
 import { ChunkCache, BAKE_NOREAD } from '../render/ChunkCache';
 import type { SpriteAtlas } from '../assets/SpriteAtlas';
 import type { TileSheetEntry } from '../assets/TileSheetGen';
@@ -38,6 +39,8 @@ export const WBAKE_ENABLED = (() => {
         flag,
       };
     }
+    // Fork: Sparmodus (iPhone/iPad) — kein Bake-Worker (eigene JS-Umgebung ≈ 100+ MB); ?wbake=1 erzwingt
+    if (flag !== '1' && lowMemoryMode()) return false;
     return flag !== '0';                                 // 逃生门:?wbake=0
   } catch { return false; }
 })();

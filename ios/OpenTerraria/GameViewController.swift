@@ -24,8 +24,11 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         window.__otNative = { platform: 'ios', bridgePort: \(LocalServer.bridgePort), version: '\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "1")' };
         """
         cfg.userContentController.addUserScript(WKUserScript(source: boot, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        #if targetEnvironment(simulator)
-        // Nur Simulator (automatische Tests): `simctl launch … -otEval "<js>"`
+        // Diagnose: Fehler/Warnungen des Spiels + WebGL-Kontextverlust → Logdatei (Dokumente/ot-log.txt)
+        cfg.userContentController.add(LogHandler(), name: "otlog")
+        cfg.userContentController.addUserScript(WKUserScript(source: GameViewController.logJS, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        #if targetEnvironment(simulator) || DEBUG
+        // Nur Simulator/Debug-Build (Tests): `simctl launch … -otEval "<js>"` bzw. devicectl
         if let js = UserDefaults.standard.string(forKey: "otEval"), !js.isEmpty {
             cfg.userContentController.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
@@ -68,8 +71,28 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid }
     }
 
-    // Absturz des WebContent-Prozesses (z. B. Speicherdruck) → neu laden statt schwarzem Bild
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { load() }
+    // Absturz des WebContent-Prozesses (z. B. Speicherdruck) → neu laden statt weißem Bild
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        OTLog.write("WebContent-Prozess beendet → neu laden")
+        load()
+    }
+    /// privater WebKit-Rückruf mit Grund (0 Speicherlimit, 1 CPU-Limit, 2 vom Client, 3 Absturz …)
+    @objc(_webView:webContentProcessDidTerminateWithReason:)
+    func _webView(_ webView: WKWebView, webContentProcessDidTerminateWithReason reason: Int) {
+        OTLog.write("WebContent beendet, Grund=\(reason) (0=Speicherlimit 1=CPU 2=Client 3=Absturz)")
+        load()
+    }
+
+    /// JS-Seite der Diagnose
+    static let logJS = """
+    (function(){var post=function(l,a){try{window.webkit.messageHandlers.otlog.postMessage(l+' '+Array.prototype.map.call(a,function(x){try{return typeof x==='string'?x:(x&&x.stack)||JSON.stringify(x)}catch(e){return String(x)}}).join(' ').slice(0,1500))}catch(e){}};
+    ['error','warn'].forEach(function(k){var o=console[k];console[k]=function(){var a0=String(arguments[0]||'');if(a0.indexOf('[beat]')<0&&a0.indexOf('[bitmap')<0)post(k,arguments);return o.apply(console,arguments)}});
+    addEventListener('error',function(e){post('onerror',[(e.message||'')+' @'+(e.filename||'')+':'+(e.lineno||'')])});
+    addEventListener('unhandledrejection',function(e){post('reject',[e.reason&&e.reason.stack||String(e.reason)])});
+    document.addEventListener('webglcontextlost',function(e){post('gl',['context lost on '+(e.target&&e.target.id)])},true);
+    var ig=false;setInterval(function(){var g=window.__swGame;if(!!g!==ig){ig=!!g;post('state',[ig?'ingame':'menu'])}},1000);
+    post('boot',[location.href]);})();
+    """
 
     // Externe Links (z. B. Credits/GitHub) in Safari öffnen
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
@@ -111,8 +134,42 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         present(a, animated: true)
     }
 
+    override func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        OTLog.write("Speicherwarnung (App)")
+    }
+
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
     override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { .all }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+}
+
+
+/// Logdatei in Dokumente (über Finder/„Dateien“ und devicectl abrufbar)
+enum OTLog {
+    static let url: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("ot-log.txt")
+    private static let q = DispatchQueue(label: "ot.log")
+    private static let fmt: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm:ss.SSS"; return f }()
+    static func rotate() {
+        q.sync {
+            let prev = url.deletingLastPathComponent().appendingPathComponent("ot-log.prev.txt")
+            try? FileManager.default.removeItem(at: prev)
+            try? FileManager.default.moveItem(at: url, to: prev)
+        }
+    }
+    static func write(_ s: String) {
+        let line = "\(fmt.string(from: Date())) \(s)\n"
+        print(line, terminator: "")
+        q.async {
+            if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }
+            else { try? Data(line.utf8).write(to: url) }
+        }
+    }
+}
+
+private final class LogHandler: NSObject, WKScriptMessageHandler {
+    func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {
+        OTLog.write("js " + String(describing: m.body))
+    }
 }

@@ -135,7 +135,7 @@ describe('M14 IngameOptions 杂项默认值（原版 1:1）', () => {
     const d = options.data;
     expect(d.reversedUpDownArmorSetBonuses).toBe(false);       // Main.cs:253
     expect(d.doorOpeningPreference).toBe('enabled');           // DoorOpeningHelper.cs:216
-    expect(d.autoReuseAllItems).toBe(false);                   // Main.cs:241
+    expect(d.autoReuseAllItems).toBe(true);                    // Fork: Autofire standardmäßig an (Original Main.cs:241 = false)
     expect(d.showItemText).toBe(true);                         // Main.cs:1194
     expect(d.invasionProgressMode).toBe(2);                    // Main() 静默初始化 :65992（非字段 0）
     expect(d.placementPreview).toBe(true);                     // Main.cs:1298

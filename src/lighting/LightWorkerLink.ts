@@ -11,6 +11,7 @@
 //     预算+双拍确认闩+onerror 硬证据直杀;引擎 dispose+阶梯重生,不再永久回落）
 // 三态：warmup（结果未达:快照+本地双跑=首帧不黑屏）→ live（worker only）→
 // fallback（_lw 置 null,本地照常,dirty 强制全周期;阶梯到期重生重建链路）。
+import { lowMemoryMode } from '../core/lowMemory';
 import {
   SNAPSHOT_PAD, TILE_CHAN_KEYS, TILE_CHAN_BYTES_PER_CELL, LIGHT_DELTA_VERSION,
   LightDeltaEncoder, sliceGeometry, allocSliceChannels,
@@ -26,7 +27,10 @@ import type { TileStore } from '../world/TileStore';
  *  旗若为 true 会让镜像引擎的 compute 再 spawn 同脚本子 worker=每帧消息沿链 spawn） */
 export const lightWorkerFlag = (() => {
   try {
-    return typeof document !== 'undefined' && new URLSearchParams(location.search).get('lightworker') !== '0';
+    if (typeof document === 'undefined') return false;
+    const f = new URLSearchParams(location.search).get('lightworker');
+    if (f !== '1' && lowMemoryMode()) return false;   // Fork: Sparmodus — Licht im Hauptthread
+    return f !== '0';
   } catch { return true; }
 })();
 

@@ -209,6 +209,7 @@ export class WorldSelectPanel {
     this.panel = document.createElement('div');
     this.panel.className = 'sw-vsel';
     this.panel.innerHTML = `
+      <img class="sw-vsel-logo" src="sprites/vanilla-ui/Logo.png" alt="">
       <div class="sw-vsel-title sw-vbtn">${Lang.text('UI.SelectWorld')}</div>
       <div class="sw-vsel-panel sw-vpanel"><div class="sw-vsel-list"></div></div>
       <div class="sw-vsel-storage"></div>
@@ -443,13 +444,26 @@ export class WorldSelectPanel {
       info.className = 'sw-vitem-info';
       const name = document.createElement('div');
       name.className = 'name';
-      name.textContent = (meta.favorite ? '★ ' : '') + (meta.name || Lang.text('Mods.SandboxWorld.WorldSelect.Unnamed'));
-      if (meta.favorite) name.style.color = '#ffe745';
+      name.textContent = meta.name || Lang.text('Mods.SandboxWorld.WorldSelect.Unnamed');
+      if (meta.favorite) { const st = document.createElement('span'); st.className = 'fav'; st.textContent = '★'; name.appendChild(st); }
       const sub = document.createElement('div');
       sub.className = 'sub';
       const mins = Math.floor(meta.playTimeMs / 60000);
       sub.textContent = `${SIZE_LABEL(meta)} · ${meta.w}×${meta.h} · ${DIFF_LABEL()[meta.difficulty] ?? '?'} · ${Lang.text('Mods.SandboxWorld.WorldSelect.PlayTimeMins', mins)}`;
       info.append(name, sub);
+      // Fork: wie im Original — Trennlinie + Kästen Schwierigkeit (farbig) · Größe · Erstellt
+      info.appendChild(Object.assign(document.createElement('div'), { className: 'sw-vdiv' }));
+      const boxes = document.createElement('div');
+      boxes.className = 'sw-vboxes';
+      const box = (text: string, cls = '', color = ''): void => {
+        const b = document.createElement('div'); b.className = `sw-vbox ${cls}`; b.textContent = text;
+        if (color) b.style.color = color; boxes.appendChild(b);
+      };
+      const DIFF_COLOR = ['#ffffff', 'rgb(255,153,0)', 'rgb(255,45,30)', 'rgb(255,120,190)'];
+      box(DIFF_LABEL()[meta.difficulty] ?? '?', '', DIFF_COLOR[meta.difficulty] ?? '');
+      box(SIZE_LABEL(meta));
+      box(Lang.text('UI.WorldCreatedFormat', new Date(meta.createdAt).toLocaleDateString(Lang.activeCultureName || undefined)), 'wide');
+      info.appendChild(boxes);
       // 底缘图标钮（Play/Favorite/Copy；Delete 右下——UIWorldListItem.cs:102-158）
       const btns = document.createElement('div');
       btns.className = 'sw-vitem-btns';

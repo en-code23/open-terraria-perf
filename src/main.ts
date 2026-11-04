@@ -1,5 +1,6 @@
 // 入口：加载素材/字体/文案 → VUI 主菜单 → 生成/加载世界 → 进入游戏
 // 流程编排见 mainFlow.ts；本文件只做装配 + 游戏内键盘/开发者工具接线。
+import { lowMemoryMode } from './core/lowMemory';
 import { FORK_DEV_KEYS } from './core/forkDev';
 import { installTerrariaSkin } from './ui/TerrariaSkin';
 import './workers/procShim';   // ★首导入兜底(见 procShim.ts;worker 侧同款已挂 worldGen.worker)
@@ -1107,7 +1108,8 @@ kvHas('sandboxworld.quicksave').catch((e) => {
   // 懒 worker 预取钩子注入(音频门等待窗口借 SW 回填;见 WorldGenClient/SaveClient 尾注)
   // ★2026-09-28 看门狗治理:light/wave 补齐同款预热——冷模块图取>2s 曾被 warmup
   //  看门狗按墙钟误杀且零重生路径=整会话 40% 主线程墙钟（trace 定谳,见 WorkerGovernance 头注）
-  setLazyWorkerPrefetch(() => { prefetchWorldGenWorker(); prefetchSaveWorker(); prefetchLightWaveWorkers(); });
+  // Fork: Sparmodus — kein Vorladen (startet sonst kurz 4 Worker = Speicherspitze beim Start)
+  if (!lowMemoryMode()) setLazyWorkerPrefetch(() => { prefetchWorldGenWorker(); prefetchSaveWorker(); prefetchLightWaveWorkers(); });
   // ★启动幕生命周期(2026-08-25 用户要求"门后黑屏间隙铺向日葵"):向日葵幕存活至
   //   过渡页三层图挂载(首帧绘出)才交接——覆盖 音频门点击后 → loadAssets → 过渡图
   //   缓存等待 的全部无图窗口,消灭"以为故障黑屏"。z=10000:门(10001)之下、

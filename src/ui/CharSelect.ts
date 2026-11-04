@@ -118,6 +118,40 @@ const CSS = `
 @media (hover: none) and (pointer: coarse) {
   .sw-vico { display: inline-flex; padding: 6px; margin: -6px; }
 }
+/* ---- Fork: Spieler-/Weltauswahl wie im Original (UICharacterListItem/UIWorldListItem):
+   Logo oben, Kopfzeile sitzt auf dem Panel, Name + Trennlinie + dunkle Infokästen ---- */
+.sw-vsel-logo { align-self: center; height: 92px; width: auto; image-rendering: pixelated; margin-bottom: -2px;
+  pointer-events: none; filter: drop-shadow(0 2px 0 rgba(0,0,0,.35)); }
+.sw-vsel-title { position: relative; z-index: 2; margin-bottom: -18px; padding: 6px 26px; font-size: 22px; }
+.sw-vsel-panel { padding: 22px 8px 8px; }
+.sw-vsel-list { max-height: 50vh; }
+.sw-vitem { height: 112px; }
+.sw-vsel-title.sw-vbtn { min-height: 0; height: auto; line-height: 1.2; }
+.sw-vitem-doll, .sw-vitem-icon { top: 50%; transform: translateY(-50%); }
+.sw-vitem-info { top: 13px; left: 84px; right: 14px; }
+.sw-vitem-info .name { font-size: 16px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw-vitem-info .name .fav { color: #ffe745; float: right; }
+.sw-vdiv { height: 4px; margin: 3px 0 4px; background: url(sprites/vanilla-ui/UI_Divider.png) 0 0 / 8px 4px repeat-x;
+  image-rendering: pixelated; }
+.sw-vboxes { display: flex; gap: 4px; }
+.sw-vbox { flex: 1 1 0; min-width: 0; height: 24px; display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 0 6px; font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(24,32,78,.72); border: 2px solid rgba(12,16,44,.9); border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(120,140,220,.18); box-sizing: border-box; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+.sw-vbox.wide { flex: 1.6 1 0; }
+.sw-vbox img { width: 14px; height: 14px; image-rendering: pixelated; flex: none; }
+.sw-vitem-btns { left: 84px; top: 70px; bottom: auto; }
+.sw-vitem-del { top: 68px; bottom: auto; right: 14px; }
+.sw-vitem-del-label { top: 72px; bottom: auto; right: 44px; }
+.sw-vitem-info .sub { display: none; }
+@media (max-height: 500px) {
+  .sw-vsel-logo { height: 54px; margin-bottom: -4px; }
+  .sw-vsel-title { font-size: 18px; margin-bottom: -16px; padding: 4px 22px; }
+  .sw-vsel-panel { padding-top: 18px; }
+  .sw-vsel-list { max-height: calc(94vh - 196px); max-height: calc(94dvh - 196px); }
+  .sw-vitem { height: 108px; }
+  .sw-vbox { font-size: 12px; height: 22px; }
+}
 `;
 
 export function ensureStyle() {
@@ -134,6 +168,8 @@ export function ensureStyle() {
 }
 
 const BTN_SRC = (n: string): string => `sprites/vanilla-ui/${n}.png`;
+/** Fork: „Neu“ statt der deutschen Original-Übersetzung „Neue(r/s)“ */
+const newLabel = (): string => ((Lang.activeCultureName ?? '').startsWith('de') ? 'Neu' : Lang.text('UI.New'));
 
 /** 触屏(无 hover)设备:行标签无法悬停唤出,构建时预填主行动文案。
  *  与 CSS C 档断点同源(hover:none+pointer:coarse),桌面恒 false 零差异 */
@@ -153,12 +189,13 @@ export class CharSelectPanel {
     this.panel = document.createElement('div');
     this.panel.className = 'sw-vsel';
     this.panel.innerHTML = `
+      <img class="sw-vsel-logo" src="sprites/vanilla-ui/Logo.png" alt="">
       <div class="sw-vsel-title sw-vbtn">${Lang.text('UI.SelectPlayer')}</div>
       <div class="sw-vsel-panel sw-vpanel"><div class="sw-vsel-list"></div></div>
       <div class="sw-vsel-footer">
         <button class="sw-vbtn" data-act="back">${Lang.text('UI.Back')}</button>
         <button class="sw-vbtn" data-act="import">${Lang.text('Mods.SandboxWorld.CharSelect.ImportBtn')}</button>
-        <button class="sw-vbtn" data-act="new">${Lang.text('UI.New')}</button>
+        <button class="sw-vbtn" data-act="new">${newLabel()}</button>
       </div>
     `;
     this.body = this.panel.querySelector('.sw-vsel-list')!;
@@ -188,7 +225,7 @@ export class CharSelectPanel {
     this.unsubLang = Lang.onChange(() => {
       (this.panel.querySelector('.sw-vsel-title') as HTMLElement).textContent = Lang.text('UI.SelectPlayer');
       (this.panel.querySelector('[data-act=back]') as HTMLElement).textContent = Lang.text('UI.Back');
-      (this.panel.querySelector('[data-act=new]') as HTMLElement).textContent = Lang.text('UI.New');
+      (this.panel.querySelector('[data-act=new]') as HTMLElement).textContent = newLabel();
       (this.panel.querySelector('[data-act=import]') as HTMLElement).textContent = Lang.text('Mods.SandboxWorld.CharSelect.ImportBtn');
       void this.reload();
     });
@@ -327,6 +364,23 @@ export class CharSelectPanel {
         ? Lang.text('Mods.SandboxWorld.CharSelect.HardcoreDead')
         : DIFFICULTY_INFO[a.difficulty]?.label ?? '';
       info.append(nameEl, subEl);
+      // Fork: wie im Original — Trennlinie + Kästen ♥ LP · ★ MP · Schwierigkeit · zuletzt gespielt
+      if (meta.favorite) { const st = document.createElement('span'); st.className = 'fav'; st.textContent = '★'; nameEl.appendChild(st); }
+      info.appendChild(Object.assign(document.createElement('div'), { className: 'sw-vdiv' }));
+      const boxes = document.createElement('div');
+      boxes.className = 'sw-vboxes';
+      const box = (html: string, cls = ''): HTMLElement => {
+        const b = document.createElement('div'); b.className = `sw-vbox ${cls}`; b.innerHTML = html; boxes.appendChild(b); return b;
+      };
+      const stats = await this.store.getState(meta.id).catch(() => null) as { baseMaxHp?: number; baseMaxMana?: number } | null;
+      box(`<img src="sprites/vanilla-ui/Heart.png" alt="">${stats?.baseMaxHp ?? 100}${Lang.text('GameUI.PlayerLifeMax')}`);
+      box(`<img src="sprites/vanilla-ui/Mana.png" alt="">${stats?.baseMaxMana ?? 20}${Lang.text('GameUI.PlayerManaMax')}`);
+      const dBox = box('', 'wide');
+      dBox.textContent = a.hardcoreDead ? Lang.text('Mods.SandboxWorld.CharSelect.HardcoreDead') : (DIFFICULTY_INFO[a.difficulty]?.label ?? '');
+      dBox.style.color = `rgb(${dc.r},${dc.g},${dc.b})`;
+      const lp = meta.lastPlayed ?? meta.createdAt;
+      box('', 'wide').textContent = lp ? new Date(lp).toLocaleDateString(Lang.activeCultureName || undefined) : '';
+      info.appendChild(boxes);
       // 操作钮（底缘行：Play/Rename/Copy；Delete 右下——UICharacterListItem.cs:73-121）
       const btns = document.createElement('div');
       btns.className = 'sw-vitem-btns';

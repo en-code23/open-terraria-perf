@@ -26,8 +26,14 @@ setMusicOverrideListener((affected) => {
  *  'main' 解除面与其取并集——进世界后由环境选曲链接管,同原版 gameMenu/游戏世界分域） */
 const SEED_MENU_MUSIC = new Set<number>([60, 70, 72, 75, 86, 8, 11, 6, 51]);   // ★IIIII228：+Old 6/Current 51（TitleMusicStyle 选曲面,50=TITLE_ID 已含）
 
+/** Fork: gemeinsame Schnittstelle für dekodierte Puffer und gestreamte Musik (Sparmodus) */
+interface TrackSrc {
+  loop: boolean;
+  stop(): void;
+  addEventListener(type: 'ended', fn: () => void): void;
+}
 interface Track {
-  src: AudioBufferSourceNode;
+  src: TrackSrc;
   gain: GainNode;
   fade: number;   // 0..1（≈原版 Main.musicFade[id]）
   /** ★fade 归零拆轨前置旗标(onended 哨兵用):true=正常停轨;ended 无此旗标=loop 失效 */
@@ -311,6 +317,59 @@ export class AudioSystem {
     this.emit('start', { id });   // 实起（解码完成后轨真正出声的时刻）
   }
 
+  /** Fork: Sparmodus-Streaming nur für Original-Musik (keine Mod-/Ressourcenpaket-Quellen) */
+  private streamMusic(id: number): boolean {
+    if (!lowMemoryMode() || typeof Audio === 'undefined') return false;
+    return !modMusicSource(id) && !musicPackOverride(`Music_${id}`);
+  }
+
+  /** Fork: gestreamte Spur (HTMLAudioElement → MediaElementSource → Gain), Lautstärke/
+   *  Überblendung laufen wie bei dekodierten Spuren über track.gain */
+  private trackStream(id: number): void {
+    const ac = this.audio();
+    if (!ac || this.pool.has(id) || this.failedFresh(id)) return;
+    const el = new Audio();
+    el.src = `audios/music/Music_${id}.mp3`;
+    el.setAttribute('loop', '');   // Medien-Element: Endlosschleife (kein AudioBuffer → applyLoopBounds n/a)
+    el.preload = 'auto';
+    el.setAttribute('playsinline', '');
+    (el as unknown as { playsInline?: boolean }).playsInline = true;
+    const node = ac.createMediaElementSource(el);
+    const gain = ac.createGain();
+    gain.gain.value = 0;
+    node.connect(gain).connect(ac.destination);
+    const src: TrackSrc = {
+      get loop() { return el.loop; },
+      set loop(v: boolean) { el.loop = v; },
+      stop: () => {
+        try { el.pause(); } catch { /* */ }
+        try { node.disconnect(); } catch { /* */ }
+        el.removeAttribute('src');
+        try { el.load(); } catch { /* Puffer freigeben */ }
+      },
+      addEventListener: (_t, fn) => el.addEventListener('ended', fn),
+    };
+    const track: Track = { src, gain, fade: 0 };
+    el.addEventListener('error', () => {
+      this.pool.delete(id);
+      this.markFailed(id);
+      this.emit('fail', { id });
+    });
+    const p = el.play();
+    if (p && typeof p.catch === 'function') {
+      // vor der ersten Geste: beim Fortsetzen des AudioContext erneut versuchen
+      p.catch(() => {
+        const retry = () => { if (this.pool.get(id) === track) void el.play().catch(() => {}); };
+        ac.addEventListener('statechange', retry, { once: true });
+        document.addEventListener('touchend', retry, { once: true, capture: true });
+        document.addEventListener('click', retry, { once: true, capture: true });
+      });
+    }
+    this.pool.set(id, track);
+    this.startLoop();
+    this.emit('start', { id });
+  }
+
   /** 月总召唤倒计时音乐压制（Main.cs:11646-11664,R22 接线,Game 每帧调用）：
    *  num=(countdown/max)²,countdown>max×0.2 时生效、否则归零（60s 倒计时末段
    *  渐熄至静默）;countdown==1 且有当前曲时把该曲 fade 清 0（下曲硬起）。
@@ -421,6 +480,8 @@ export class AudioSystem {
     const ac = this.audio();
     if (!ac) return;
     if (ac.state !== 'running') swTrace(`playMusic 于挂起 AC 起播(state=${ac.state},手势恢复后出声)`);
+    // Fork: Sparmodus — Musik streamen statt komplett zu dekodieren (50–90 MB je Stück)
+    if (this.streamMusic(id)) { this.trackStream(id); return; }
     // 缓冲未就绪：解码完成后补建源（此时才真正起播，无冷启动顿挫）
     if (!this.buffers.has(id)) {
       void this.buffer(id).then((buf) => { if (buf && this.curMusic === id) this.track(id); });
