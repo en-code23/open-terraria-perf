@@ -399,8 +399,12 @@ export const CRAFT_NEARBY_BTN_OFF = 40;
 // ---- 容器缩放(本仓登记偏差:原版小屏直接裁切,本仓整体等比) ----
 //   K = clamp(uiScale × min(1, vw/720, vh/780), 0.5, 1.15)
 //   下限保证 10×5 网格(476px)+右列(~278px)在 844×390 竖屏不溢出
+/** Fork: Touch-Geräte (Handy quer) — Layout auf die Original-Mindesthöhe 600 statt 780
+ *  auslegen (sonst Faktor ~0,5 → Inventar/Crafting viel kleiner als die Touch-Hotbar) */
+export let vanillaMinLogicalH = 780;
+export function setVanillaMinLogicalH(h: number): void { vanillaMinLogicalH = h; }
 export function vanillaScaleFor(vw: number, vh: number, uiScale = 1): number {
-  const k = uiScale * Math.min(1, vw / 720, vh / 780);
+  const k = uiScale * Math.min(1, vw / 720, vh / vanillaMinLogicalH);
   return Math.min(1.15, Math.max(0.5, k));
 }
 

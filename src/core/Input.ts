@@ -70,6 +70,8 @@ export class Input {
    *  被 use 清掉后无 mousedown 事件回填,链球出生 1 帧即判松手回收(2026-08-13) */
   mouseHeld = false;
   rightDown = false;
+  /** Fork: rightDown stammt vom Langdruck auf dem Touchscreen (spricht keine NPCs an) */
+  rightFromTouch = false;
   /** ★SW-BJ1 2026-09-06 触摸长按右键脉冲预钩（Game 注入,UI 落地）：返回 true=脉冲
    *  已被消费（光标持物丢出等价,Player.dropItemCheck :5139
    *  `mouseRight && !mouseInterface && mouseRightRelease` 的右压沿语义——触摸长按
@@ -241,7 +243,7 @@ export class Input {
         //   智能光标 controlUseItem（与 blockMouse 同族同位）。
         this.mouseDown = true; this.mouseHeld = true;
       }
-      if (e.button === 2) { this.rightDown = true; this.pendingRightRelease = 1; }   // SW-AW1 武装
+      if (e.button === 2) { this.rightDown = true; this.rightFromTouch = false; this.pendingRightRelease = 1; }   // SW-AW1 武装
     }) as EventListener);
     onWin('mouseup', ((e: MouseEvent) => {
       // SW-AF1 2026-09-04（F-2）：复位=松键（TriggersSet.cs:844-847 else 支）——
@@ -315,6 +317,7 @@ export class Input {
         // 消费则不置 rightDown——丢出吞沿,同一次按压不再触世界右键交互
         if (this.onLongPressRightPulse?.()) return;
         this.rightDown = true;
+        this.rightFromTouch = true;   // Fork: Langdruck — NPCs nur über den Interagieren-Knopf
       }, 400);
     }) as EventListener, { passive: false });
     onEl('touchmove', ((e: TouchEvent) => {

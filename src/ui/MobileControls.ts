@@ -15,6 +15,7 @@ import { ITEM_DEFS, ITEM_BY_KEY, VANILLA_ITEM_KEY_BY_ID } from '../data/items';
 import { TILE_DEFS } from '../data/tiles';
 import { TownNPC } from '../entities/TownNPC';
 import { hookItemOf } from '../data/grappleHooks';
+import { setVanillaMinLogicalH } from './vanillaInvLayout';
 import { mountOfItem, isCartMount } from '../entities/Mounts';
 import { itemFuncOfVid } from '../data/vanillaItemFunc';
 
@@ -54,7 +55,7 @@ const CSS = `
 .sw-mobile { position:fixed; inset:0; pointer-events:none; z-index:150; --u:1px;
   font-family:inherit; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 .sw-mobile > * { pointer-events:auto; }
-.sw-mobile.inv .sw-mjoy, .sw-mobile.inv .sw-mjump, .sw-mobile.inv .sw-matk, .sw-mobile.inv .sw-mact { display:none; }
+.sw-mobile.inv .sw-mjoy, .sw-mobile.inv .sw-mjump, .sw-mobile.inv .sw-matk, .sw-mobile.inv .sw-mact, .sw-mobile.inv .sw-mpause { display:none; }
 /* ---- Grundformen ---- */
 .sw-mbtn, .sw-mjump, .sw-mjoy .knob, .sw-matk .knob { touch-action:none; }
 .sw-mround, .sw-mjump, .sw-mjoy .knob, .sw-matk .knob {
@@ -549,6 +550,10 @@ function ensureCss(): void {
 
 /** 首个用户手势内尝试全屏 + 横屏锁定（失败静默——iOS 不支持 orientation.lock） */
 export async function tryFullscreenLandscape(): Promise<void> {
+  // Fork: in der iPhone/iPad-App bzw. als Home-Bildschirm-App schon Vollbild —
+  // sonst zeigt iOS „127.0.0.1 ist im Vollbildmodus …“
+  if ((window as unknown as { __otNative?: unknown }).__otNative) return;
+  try { if (matchMedia('(display-mode: standalone)').matches) return; } catch { /* */ }
   try {
     if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
   } catch { /* 拒绝/不支持 */ }
@@ -611,6 +616,8 @@ export class MobileControls {
     this.autoJumpTimer = setInterval(() => this.autoJumpTick(), 50);
     this.optListener = () => this.applySkinVars();
     options.onChange(this.optListener);
+    // Fork: Inventar/Crafting auf dem Handy größer (Layout-Mindesthöhe 600 wie das Original)
+    setVanillaMinLogicalH(600);
     // Fork: wie die App — Minikarte zu Beginn aus (Knopf oben rechts schaltet sie)
     try { if (game.renderer) game.renderer.mapStyle = 0; } catch { /* Renderer fehlt (Tests) */ }
     this.buildJoystick();
@@ -653,6 +660,7 @@ export class MobileControls {
     this.game.input.releaseAllVirtual();
     this.root.remove();
     hudReserveRight = 0;
+    setVanillaMinLogicalH(780);
   }
 
   /** --u (Layout-Pixel) / --mbtn-alpha aus Bildschirmhöhe + Einstellungen */

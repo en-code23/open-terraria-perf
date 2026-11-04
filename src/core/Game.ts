@@ -30987,6 +30987,7 @@ case 2756: { // 性别转换药水（Player.cs:43519-43544）:Male 翻转
     // ★BJ250：`!this.tileInteractHappened` = 原版交谈臂 `!tileInteractionHappened`
     //  面（Main.cs:43807）——雪球发射器 212 不吞 rightDown,由该旗同拍压制交谈
     if (this.input.rightDown && !this._prevRightDown && !this.tileInteractHappened
+      && !this.input.rightFromTouch   // Fork: Touch-Langdruck spricht keine NPCs an (eigener Knopf)
       && this.talkToNearbyNpc(...this.camera.screenToWorld(inp.mouseX, inp.mouseY))) {
       // ★SW-BH1 2026-09-06：传精确世界像素光标（Main.DrawMouseOver Main.cs:43597-43599
       // MouseScreen+screenPosition 1×1 矩形）——旧 tile 中心量化（+0.5)*TILE 有 ±8px 粒度

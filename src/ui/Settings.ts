@@ -162,8 +162,11 @@ label.sw-set-row:hover, label.sw-set-row:hover > span { color: rgb(255,231,69); 
   .sw-set-cats div { font-size: 26px; line-height: 1.18; }
   .sw-set-content { padding: 12px 12px; gap: 9px; max-height: none; overflow-y: auto; }
   .sw-set-row { font-size: 17px; }
-  .sw-vslider { --vs: 1.15; }
+  .sw-vslider { --vs: 1; }
+  .sw-set-row:has(.sw-vslider) > span:first-child { flex: 0 0 34%; }
+  .sw-set-row { font-size: 16px; }
 }
+.sw-set-content { overflow-x: hidden; }
 `;
 
 /** Utils.CycleControlControl_OffOnClickHold（Utils.cs:159-176）一比一——1457 相机
@@ -256,7 +259,7 @@ export class SettingsPanel {
       const close = document.createElement('div');
       close.className = 'sw-set-close';
       close.textContent = de ? 'Menü schließen' : 'Close Menu';
-      close.addEventListener('click', () => { UISfx.click(); (this.panel.querySelector('.sw-set-back') as HTMLElement | null)?.click(); });
+      close.addEventListener('click', () => { UISfx.click(); (this.panel.querySelector('.sw-set-footer .sw-set-back') as HTMLElement | null)?.click(); });
       cats.appendChild(close);
     }
     for (const a of this.flow.extraActions ?? []) {
@@ -347,7 +350,17 @@ export class SettingsPanel {
       btn.style.opacity = '0.55';
     }
     if (opts?.hint) { btn.title = opts.hint; span.title = opts.hint; }
-    btn.addEventListener('click', () => { cycle(); btn.textContent = value(); });
+    // Fork: wie im Original nur „Bezeichnung: Wert“ — enthält der Wert die Bezeichnung schon
+    // (z. B. „Licht: Farbe“, „Aufsammeltext an“), Bezeichnung ausblenden, sonst mit Doppelpunkt
+    const norm = (t: string) => t.replace(/[:：]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    const head = norm(label).split(' ').slice(0, 2).join(' ');
+    const syncLabel = () => {
+      const dup = !!head && norm(btn.textContent ?? '').startsWith(head);
+      span.style.display = dup ? 'none' : '';
+      span.textContent = dup || /[:：]\s*$/.test(label) ? label : `${label}:`;
+    };
+    syncLabel();
+    btn.addEventListener('click', () => { cycle(); btn.textContent = value(); syncLabel(); });
     row.append(span, btn);
     return row;
   }

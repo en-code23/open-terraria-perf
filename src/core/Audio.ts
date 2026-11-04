@@ -498,8 +498,21 @@ export class AudioSystem {
   play(which: 'title' | 'main', titleMusicId?: number) {
     if (this.muted) return;
     if (which === 'title') this.playMusic(menuMusicId() ?? titleMusicId ?? TITLE_ID);   // ★BGM 面:菜单主题曲覆盖(CalamityMainMenu.GetMusicFromMusicMod 同构)
-    else if (this.curMusic === TITLE_ID || SEED_MENU_MUSIC.has(this.curMusic)
-      || (menuMusicId() != null && this.curMusic === menuMusicId())) this.playMusic(0);
+    else {
+      if (this.curMusic === TITLE_ID || SEED_MENU_MUSIC.has(this.curMusic)
+        || (menuMusicId() != null && this.curMusic === menuMusicId())) this.playMusic(0);
+      // Fork: Menü-/Titelmusik beim Betreten der Welt sofort beenden (nicht erst überblenden —
+      // bei schnellem Wiedereinstieg lief sie sonst im Spiel weiter)
+      for (const [id, t] of [...this.pool]) {
+        if (id === TITLE_ID || SEED_MENU_MUSIC.has(id) || (menuMusicId() != null && id === menuMusicId())) {
+          t.fade = 0;
+          t.stoppedByFade = true;
+          try { t.gain.gain.value = 0; t.src.stop(); } catch { /* schon gestoppt */ }
+          this.pool.delete(id);
+          this.emit('stop', { id });
+        }
+      }
+    }
   }
 
   /** 旧昼夜变奏钩子：曲目切换已由选曲链接管（昼/夜曲不同 id），无操作 */
