@@ -369,12 +369,17 @@ export class CharSelectPanel {
       info.appendChild(Object.assign(document.createElement('div'), { className: 'sw-vdiv' }));
       const boxes = document.createElement('div');
       boxes.className = 'sw-vboxes';
-      const box = (html: string, cls = ''): HTMLElement => {
-        const b = document.createElement('div'); b.className = `sw-vbox ${cls}`; b.innerHTML = html; boxes.appendChild(b); return b;
+      // nur DOM-API + textContent (Spielstände können importiert sein → keine HTML-Strings)
+      const box = (text = '', cls = '', iconSrc = ''): HTMLElement => {
+        const b = document.createElement('div'); b.className = `sw-vbox ${cls}`;
+        if (iconSrc) { const im = document.createElement('img'); im.src = iconSrc; im.alt = ''; b.appendChild(im); }
+        b.appendChild(document.createTextNode(text));
+        boxes.appendChild(b); return b;
       };
-      const stats = await this.store.getState(meta.id).catch(() => null) as { baseMaxHp?: number; baseMaxMana?: number } | null;
-      box(`<img src="sprites/vanilla-ui/Heart.png" alt="">${stats?.baseMaxHp ?? 100}${Lang.text('GameUI.PlayerLifeMax')}`);
-      box(`<img src="sprites/vanilla-ui/Mana.png" alt="">${stats?.baseMaxMana ?? 20}${Lang.text('GameUI.PlayerManaMax')}`);
+      const stats = await this.store.getState(meta.id).catch(() => null) as { baseMaxHp?: unknown; baseMaxMana?: unknown } | null;
+      const num = (v: unknown, d: number): number => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : d; };
+      box(`${num(stats?.baseMaxHp, 100)}${Lang.text('GameUI.PlayerLifeMax')}`, '', 'sprites/vanilla-ui/Heart.png');
+      box(`${num(stats?.baseMaxMana, 20)}${Lang.text('GameUI.PlayerManaMax')}`, '', 'sprites/vanilla-ui/Mana.png');
       const dBox = box('', 'wide');
       dBox.textContent = a.hardcoreDead ? Lang.text('Mods.SandboxWorld.CharSelect.HardcoreDead') : (DIFFICULTY_INFO[a.difficulty]?.label ?? '');
       dBox.style.color = `rgb(${dc.r},${dc.g},${dc.b})`;
