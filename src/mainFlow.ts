@@ -33,7 +33,7 @@ import { VUI } from './vui/VUI';
 import { warmAllAssets } from './net/AssetCache';
 import { gateAssetsOrRun, mountAssetBadge } from './ui/AssetDownloadUI';
 import { TitleMenu } from './ui/TitleMenu';
-import { MultiplayerSelect, isLocalNetAddr } from './ui/MultiplayerSelect';
+import { MultiplayerSelect, isLocalNetAddr, lanHelperBase, lanServerTarget } from './ui/MultiplayerSelect';
 import { SettingsPanel } from './ui/Settings';
 import { BestiaryPanel } from './ui/BestiaryPanel';
 import { CharSelectPanel } from './ui/CharSelect';
@@ -81,6 +81,8 @@ export interface FlowHandle {
   /** ★BJ280：更新横幅「保存后刷新」通道——静默存档全链落定→清卸载拦截态→reload
    *  （存档失败也刷新,BJ144 取舍;拦截态无条件解除=用户明示动作不二次弹窗） */
   saveAndReload(): void;
+  /** Fork: „Für LAN öffnen“ — aktuelle Welt auf dem echten Terraria-Server (LAN-Helfer) starten und beitreten */
+  openToLan(): Promise<void>;
   openSettings(inGame: boolean, opts?: { onBack?: () => void; extraActions?: Array<{ label: string; onClick: () => void }> }): HTMLElement | null;
   openBestiary(): void;
   /** 住房面板（背包房屋按钮 B 方案,2026-08-15） */
@@ -1506,7 +1508,10 @@ function makeGame(): Game {
   async function joinVanillaServer(target: string): Promise<void> {
     try {
       console.info('[vanilla-flow] join 启动 target=' + target);
-      const [host, portRaw] = target.split(':');
+      const ci = target.lastIndexOf(':');
+      const hasPort = ci > 0 && !target.endsWith(']') && (target.startsWith('[') || target.indexOf(':') === ci);
+      const host = (hasPort ? target.slice(0, ci) : target).replace(/^\[|\]$/g, '');
+      const portRaw = hasPort ? target.slice(ci + 1) : '';
       const port = parseInt(portRaw || '7777', 10);
       const vbParam = new URLSearchParams(location.search).get('vbridge') ?? '';
       const bridgePort = /^\d{2,5}$/.test(vbParam) ? vbParam : '5290';
@@ -2208,6 +2213,86 @@ function makeGame(): Game {
     }
   }
 
+  /** Fork: nächstes gespeichertes Welt-JSON abgreifen (für „Für LAN öffnen“) */
+  let captureNextSaveJson: ((json: string) => void) | null = null;
+
+  /** Fork: „Für LAN öffnen“ (wie Minecraft): Welt speichern → als .wld an den LAN-Helfer →
+   *  echter Terraria-Server startet → selbst beitreten. Andere Geräte treten über
+   *  Mehrspieler → LAN bzw. die angezeigte IP bei (auch das echte Terraria am PC). */
+  async function openToLan(): Promise<void> {
+    const de = (Lang.activeCultureName ?? '').startsWith('de');
+    const tx = de ? {
+      noHelper: 'LAN-Helfer nicht gefunden. Starte die Mac-App oder „npm run lan“ auf dem Rechner mit Terraria.',
+      noTerraria: 'Auf dem Rechner wurde kein Terraria (Steam) gefunden – der Server kann nicht starten.',
+      net: 'Du bist schon in einer Mehrspieler-Welt.',
+      saving: 'Welt wird gespeichert …', upload: 'Welt wird an den Server übergeben …', starting: 'Terraria-Server startet …',
+      failed: (m: string) => `Für LAN öffnen fehlgeschlagen: ${m}`,
+      open: (ips: string, port: number) => `Welt ist offen im LAN! Andere treten bei über Mehrspieler → IP ${ips} · Port ${port}`,
+    } : {
+      noHelper: 'LAN helper not found. Start the Mac app or "npm run lan" on the computer that has Terraria.',
+      noTerraria: 'No Terraria (Steam) install found on that computer — the server cannot start.',
+      net: 'You are already in a multiplayer world.',
+      saving: 'Saving world …', upload: 'Handing the world to the server …', starting: 'Starting Terraria server …',
+      failed: (m: string) => `Open to LAN failed: ${m}`,
+      open: (ips: string, port: number) => `World is open to LAN! Others join via Multiplayer → IP ${ips} · port ${port}`,
+    };
+    const g = game;
+    if (!g) return;
+    if (g.net?.active) { ui.toast(tx.net); return; }
+    const base = lanHelperBase();
+    const api = async <T,>(path: string, init?: RequestInit, ms = 15000): Promise<T> => {
+      const ctl = new AbortController();
+      const to = setTimeout(() => ctl.abort(), ms);
+      try {
+        const r = await fetch(`${base}${path}`, { cache: 'no-store', signal: ctl.signal, ...init });
+        const data = await r.json() as T & { ok?: boolean; error?: string };
+        if (!r.ok || data.ok === false) throw new Error(data.error ?? `HTTP ${r.status}`);
+        return data;
+      } finally { clearTimeout(to); }
+    };
+    type St = { ok: boolean; terraria: boolean; ips: string[]; servers: Array<{ port: number; ready?: boolean }> };
+    let st: St | null = null;
+    try { st = await api<St>('/api/status', undefined, 2500); } catch { st = null; }
+    if (!st?.ok) { ui.toast(tx.noHelper); return; }
+    if (!st.terraria) { ui.toast(tx.noTerraria); return; }
+    try {
+      ui.showProgress(tx.saving, 0.05);
+      let captured: string | null = null;
+      captureNextSaveJson = (j) => { captured = j; };
+      await doSave(true);
+      captureNextSaveJson = null;
+      const json = captured as string | null;
+      if (!json) throw new Error('save');
+      const worldName = g.world.name || 'LAN-Welt';
+      ui.showProgress(tx.upload, 0.25);
+      const bytes = await saveClient.exportWld(json);
+      const up = await api<{ file: string }>(`/api/upload?replace=1&name=${encodeURIComponent(worldName)}`,
+        { method: 'POST', body: bytes as BodyInit }, 120000);
+      ui.showProgress(tx.starting, 0.4);
+      const { port } = await api<{ port: number }>('/api/host', { method: 'POST', body: JSON.stringify({ file: up.file }) });
+      const t0 = performance.now();
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const s = await api<St>('/api/status', undefined, 4000).catch(() => null);
+        const srv = s?.servers.find((x) => x.port === port);
+        if (srv?.ready) { st = s; break; }
+        if (s && !srv) throw new Error('server stopped');
+        const el = (performance.now() - t0) / 1000;
+        if (el > 120) throw new Error('timeout');
+        ui.showProgress(tx.starting, 0.4 + Math.min(0.5, el / 60));
+      }
+      ui.hideProgress();
+      await quitToMenu();
+      await joinVanillaServer(lanServerTarget(port));
+      const ips = (st?.ips ?? []).join(', ') || location.hostname;
+      ui.toast(tx.open(ips, port));
+    } catch (e) {
+      captureNextSaveJson = null;
+      ui.hideProgress();
+      ui.toast(tx.failed((e as Error).message));
+    }
+  }
+
   function doSave(silent = false): Promise<boolean> {
     if (!game) return Promise.resolve(false);
     saveInFlight = true;   // ★BJ280：隐藏兜底互斥（finally 解除）
@@ -2232,6 +2317,7 @@ function makeGame(): Game {
     //  JSON.parse(json).player 12.4ms>10ms 阈）：saveWithPlayer——worker 回传 player
     //  切片（稳定 id 磁盘形,与 json.player 全等）,charState 同步支免整档 21MB parse。
     return saveClient.saveWithPlayer(game.world, game.player, playTimeMs, game.townNpcsForSave(), game.eventsForSave(), game.pillarNpcsForSave(), game.pressurePlatesForSave()).then(async ({ json, player }) => {
+      if (captureNextSaveJson) { const c = captureNextSaveJson; captureNextSaveJson = null; c(json); }   // Fork: „Für LAN öffnen“
       // ★BJ90（2026-09-15）债④死路径移除（BJ71 登记②）：v6 二进制快路径退役——原
       //  kvSetCompat 曾先 kvSetBinary 写二进制副本再 kvSet 同 key 写 JSON,IDB 同 store
       //  串行 → JSON 恒后写覆盖二进制副本（快路径零活跃消费方,评估定谳）;且崩溃窗口
@@ -2497,6 +2583,7 @@ function makeGame(): Game {
     doSave,
     doExportSave,
     saveAndReload,   // ★BJ280
+    openToLan,
     openSettings,
     openBestiary,
     openHousing,

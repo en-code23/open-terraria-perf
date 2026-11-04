@@ -1,0 +1,31 @@
+# Fork: iPhone/iPad-App (Xcode-Projekt wird mit XcodeGen erzeugt: scripts/make-ios.sh)
+name: OpenTerraria
+options:
+  bundleIdPrefix: local.open-terraria
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+targets:
+  OpenTerraria:
+    type: application
+    platform: iOS
+    sources:
+      - path: OpenTerraria
+      - path: build/game
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.open-terraria.app
+        PRODUCT_NAME: Terraria
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: OpenTerraria/Info.plist
+        GENERATE_INFOPLIST_FILE: NO

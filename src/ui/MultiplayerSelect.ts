@@ -3,6 +3,7 @@
 // 房主：选存档建房（勾选公开性 + 破坏保护 + 物品保护）→ 得 6 位房间码 → 进房。
 // 其他玩家：房间列表点击加入，或输房间码进非公开房。
 // 文案 = Mods.SandboxWorld.MP.*（自制联机 UI,原版无对应键）
+import { prefGet, prefSet, prefRemove } from '../save/PrefsStore';
 import { Lang } from '../i18n/Lang';
 import { ensureVanillaKit } from './vanillaKit';
 const T = (k: string, ...a: (string | number)[]) => Lang.text(`Mods.SandboxWorld.MP.${k}`, ...a);
@@ -149,8 +150,8 @@ export class MultiplayerSelect {
     const vanBtn = el('button', 'sw-btn', T('JoinVanilla')) as HTMLButtonElement;
     vanBtn.style.cssText = 'width:auto; margin:0; padding:8px 14px; flex:none;';
     vanBtn.onclick = () => {
-      const target = this.vanInput.value.trim();
-      if (!/^[\w.-]+:\d+$/.test(target)) { this.status(this.roomList, T('BadAddr'), '#ff6b6b'); return; }
+      const target = normalizeServerAddr(this.vanInput.value);
+      if (!target) { this.status(this.roomList, T('BadAddr'), '#ff6b6b'); return; }
       this.cb.onNeedCharacter(() => this.cb.onJoinVanilla(target));
     };
     this.vanInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') vanBtn.click(); });
@@ -348,9 +349,10 @@ const MP_TEXT = {
     sizes: ['Klein', 'Mittel', 'Groß'],
     diffs: ['Normal', 'Experte', 'Meister', 'Reise'],
     create: 'Erstellen und hosten',
-    ipTitle: 'Über IP beitreten',
-    ipHint: 'IP:Port (z. B. 192.168.1.20:7777)',
-    badAddr: 'Adresse im Format IP:Port eingeben',
+    ipTitle: 'Server beitreten (Vanilla, TShock, LAN oder Internet)',
+    ipHint: 'IP oder Domain[:Port] (z. B. 192.168.1.20 oder server.de:7777)',
+    badAddr: 'Adresse als IP oder Domain eingeben, optional mit :Port',
+    recent: 'Zuletzt:',
     uploading: 'Welt wird übertragen …',
     waitReady: 'Server startet …',
     failed: (e: string) => `Fehler: ${e}`,
@@ -381,9 +383,10 @@ const MP_TEXT = {
     sizes: ['Small', 'Medium', 'Large'],
     diffs: ['Classic', 'Expert', 'Master', 'Journey'],
     create: 'Create and host',
-    ipTitle: 'Join via IP',
-    ipHint: 'IP:port (e.g. 192.168.1.20:7777)',
-    badAddr: 'Enter the address as IP:port',
+    ipTitle: 'Join a server (vanilla, TShock, LAN or internet)',
+    ipHint: 'IP or domain[:port] (e.g. 192.168.1.20 or play.example.com:7777)',
+    badAddr: 'Enter an IP or domain, optionally with :port',
+    recent: 'Recent:',
     uploading: 'Sending world …',
     waitReady: 'Server is starting …',
     failed: (e: string) => `Error: ${e}`,
@@ -410,10 +413,54 @@ export function isLocalNetAddr(h: string): boolean {
   // IPv6: nur reine Hex-/Doppelpunkt-Literale (voll verankert, keine Zusätze wie „@host“)
   return /^[0-9a-f:]+$/.test(a) && a.includes(':') && /^(f[cd]|fe[89ab])[0-9a-f]{0,2}:/.test(a);
 }
+/** Fork: „host“, „host:port“, „[v6]:port“ → „host:port“ (Standard-Port 7777); ungültig → '' */
+export function normalizeServerAddr(raw: string): string {
+  const v = raw.trim().replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '');
+  const m = /^(\[[0-9a-f:]+\]|[a-z0-9.-]+)(?::(\d{1,5}))?$/i.exec(v);
+  if (!m) return '';
+  const port = m[2] ? Number(m[2]) : 7777;
+  if (!(port >= 1 && port <= 65535)) return '';
+  return `${m[1]}:${port}`;
+}
+const RECENT_KEY = 'ot.recentServers';
+function recentServers(): string[] {
+  try { const a = JSON.parse(prefGet(RECENT_KEY) ?? '[]'); return Array.isArray(a) ? a.filter((x) => typeof x === 'string' && normalizeServerAddr(x)) : []; } catch { return []; }
+}
+function rememberServer(v: string): void {
+  prefSet(RECENT_KEY, JSON.stringify([v, ...recentServers().filter((x) => x !== v)].slice(0, 6)));
+}
+
+/** Fork: läuft das Spiel in der iPhone/iPad-App (eigene Brücke auf dem Gerät)? */
+export function isNativeApp(): boolean {
+  return !!(window as unknown as { __otNative?: unknown }).__otNative;
+}
+const LAN_HELPER_KEY = 'ot.lanHelper';
+/** In der App: IP des Macs mit dem LAN-Helfer (gespeichert) */
+export function nativeLanHelper(): string {
+  const v = prefGet(LAN_HELPER_KEY) ?? ''; return isLocalNetAddr(v) ? v : '';
+}
+function setNativeLanHelper(v: string): void {
+  if (v) prefSet(LAN_HELPER_KEY, v); else prefRemove(LAN_HELPER_KEY);
+}
+function helperHost(): string {
+  const p = new URLSearchParams(location.search).get('lanhost');
+  if (p && isLocalNetAddr(p)) return p;
+  if (isNativeApp()) return nativeLanHelper() || '127.0.0.1';
+  return location.hostname || '127.0.0.1';
+}
+/** Fork: Ziel für einen Server, den der LAN-Helfer gestartet hat. Die Brücke läuft im
+ *  Browser-Fall auf dem Helfer-Rechner (→ 127.0.0.1), in der App auf dem Gerät selbst
+ *  (→ IP des Macs). */
+export function lanServerTarget(port: number): string {
+  const h = helperHost();
+  if (!isNativeApp() || /^(127\.|localhost$|::1$)/.test(h)) return `127.0.0.1:${port}`;
+  return `${h.includes(':') ? `[${h}]` : h}:${port}`;
+}
+/** Fork: Basis-URL des LAN-Helfers (scripts/lan-host.mjs) */
+export function lanHelperBase(): string { return helperBase(); }
 function helperBase(): string {
   const q = new URLSearchParams(location.search);
-  const p = q.get('lanhost');
-  const host = p && isLocalNetAddr(p) ? p : (location.hostname || '127.0.0.1');
+  const host = helperHost();
   const port = /^\d{2,5}$/.test(q.get('vbridge') ?? '') ? q.get('vbridge')! : '5290';
   const h = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
   return `http://${h}:${port}`;
@@ -490,14 +537,27 @@ class LanSection {
     this.ipInput.placeholder = t.ipHint;
     this.ipInput.value = `${location.hostname || '127.0.0.1'}:7777`;
     const ipBtn = el('button', 'sw-vbtn', t.join) as HTMLButtonElement;
+    const recent = recentServers();
+    if (recent[0]) this.ipInput.value = recent[0];
     ipBtn.onclick = () => {
-      const v = this.ipInput.value.trim();
-      if (!/^[\w.-]+:\d+$/.test(v)) { this.msg(t.badAddr, true); return; }
+      const v = normalizeServerAddr(this.ipInput.value);
+      if (!v) { this.msg(t.badAddr, true); return; }
+      rememberServer(v);
       this.joinTarget(v);
     };
     this.ipInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') ipBtn.click(); });
     ipRow.append(this.ipInput, ipBtn);
     parent.appendChild(ipRow);
+    if (recent.length > 1) {
+      const rr = el('div', 'sw-mp-form');
+      rr.appendChild(el('span', 'sw-mp-note', t.recent));
+      for (const r of recent.slice(0, 5)) {
+        const b = el('button', 'sw-vbtn', r) as HTMLButtonElement;
+        b.onclick = () => { this.ipInput.value = r; ipBtn.click(); };
+        rr.appendChild(b);
+      }
+      parent.appendChild(rr);
+    }
     this.renderHost();
     void this.refresh();
     this.timer = setInterval(() => { if (!this.destroyed) void this.refresh(); }, 2000);
@@ -533,9 +593,13 @@ class LanSection {
     if (this.destroyed) return;
     const st = this.status;
     if (!st) {
-      this.statusEl.textContent = t.helperMissing;
-      this.statusEl.classList.add('err');
+      if (isNativeApp()) this.renderNativeHelperForm();
+      else {
+        this.statusEl.textContent = t.helperMissing;
+        this.statusEl.classList.add('err');
+      }
     } else {
+      this.nativeFormShown = false;
       const ip = st.ips[0] ?? location.hostname;
       this.statusEl.textContent = `${t.helperOk(ip)}${st.terraria ? '' : ` · ${t.noTerraria}`}`;
       this.statusEl.classList.toggle('err', !st.terraria);
@@ -545,10 +609,39 @@ class LanSection {
     // automatisch beitreten, sobald der eben gehostete Server bereit ist
     if (this.autoJoinPort != null && st) {
       const s = st.servers.find((x) => x.port === this.autoJoinPort);
-      if (s?.ready) { const port = this.autoJoinPort; this.autoJoinPort = null; this.cb.onJoinVanilla(`127.0.0.1:${port}`); }
+      if (s?.ready) { const port = this.autoJoinPort; this.autoJoinPort = null; this.cb.onJoinVanilla(lanServerTarget(port)); }
       else if (s) this.msg(s.generating ? `${L().generating} ${s.progress.split(' - ')[0]}` : L().waitReady);
       else { this.autoJoinPort = null; this.msg(L().failed('Server beendet'), true); }
     }
+  }
+
+  private nativeFormShown = false;
+  /** App: LAN-Welten hostet die Mac-App — deren IP hier eintragen (einmalig) */
+  private renderNativeHelperForm(): void {
+    if (this.nativeFormShown) return;
+    this.nativeFormShown = true;
+    const de = (Lang.activeCultureName ?? '').startsWith('de');
+    this.statusEl.textContent = '';
+    this.statusEl.classList.remove('err');
+    this.statusEl.appendChild(el('div', undefined, de
+      ? 'Welten im WLAN hosten: Die Mac-App öffnen und hier die IP des Macs eintragen. Server beitreten geht auch ohne (unten).'
+      : 'To host worlds on your Wi-Fi, open the Mac app and enter the Mac\'s IP here. Joining servers works without it (below).'));
+    const row = el('div', 'sw-mp-form');
+    const inp = el('input') as HTMLInputElement;
+    inp.type = 'text';
+    inp.inputMode = 'decimal';
+    inp.placeholder = de ? 'IP des Macs (z. B. 192.168.1.20)' : 'Mac IP (e.g. 192.168.1.20)';
+    inp.value = nativeLanHelper();
+    const ok = el('button', 'sw-vbtn', 'OK') as HTMLButtonElement;
+    ok.onclick = () => {
+      const v = inp.value.trim().replace(/:\d+$/, '');
+      if (v && !isLocalNetAddr(v)) { this.msg(de ? 'Bitte eine IP aus dem eigenen WLAN eingeben' : 'Enter an IP from your own network', true); return; }
+      setNativeLanHelper(v);
+      this.nativeFormShown = false;
+      void this.refresh();
+    };
+    row.append(inp, ok);
+    this.statusEl.appendChild(row);
   }
 
   private renderServers(): void {
@@ -568,7 +661,7 @@ class LanSection {
       const join = el('button', 'sw-vbtn', t.join) as HTMLButtonElement;
       join.disabled = !s.ready;
       join.style.opacity = s.ready ? '' : '0.5';
-      join.onclick = () => this.joinTarget(`127.0.0.1:${s.port}`);
+      join.onclick = () => this.joinTarget(lanServerTarget(s.port));
       const stop = el('button', 'sw-vbtn', t.stop) as HTMLButtonElement;
       stop.onclick = () => void this.api('/api/stop', { method: 'POST', body: JSON.stringify({ port: s.port }) }).then(() => this.refresh());
       row.append(join, stop);

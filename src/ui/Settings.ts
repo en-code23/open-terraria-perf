@@ -498,8 +498,10 @@ export class SettingsPanel {
         this.modeRow(
           Lang.text('UI.SelectHealthStyle').replace(/:.*/, ''),
           () => d.resourceBarStyle,
-          () => Lang.text(d.resourceBarStyle === 'fancy' ? 'UI.HealthManaStyle_New' : 'UI.HealthManaStyle_Default'),
-          () => void options.set('resourceBarStyle', d.resourceBarStyle === 'fancy' ? 'classic' : 'fancy'),
+          () => Lang.text(d.resourceBarStyle === 'fancy' ? 'UI.HealthManaStyle_New'
+            : d.resourceBarStyle === 'bars' ? 'UI.HealthManaStyle_HorizontalBars' : 'UI.HealthManaStyle_Default'),
+          () => void options.set('resourceBarStyle',
+            d.resourceBarStyle === 'fancy' ? 'bars' : d.resourceBarStyle === 'bars' ? 'classic' : 'fancy'),
         ),
         // 小地图边框皮肤（MinimapFrameManager 9 款；config.json "MinimapFrame" 字符串键；
         // 循环方向 = SelectionHolder.CycleSelection 倒序回绕，cycleMinimapFrame 纯函数）

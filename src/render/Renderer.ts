@@ -178,6 +178,7 @@ import type { Inventory } from '../items/Inventory';
 import { options } from '../core/Options';
 import { VanillaResourceBars } from './ResourceBars';
 import { FancyResourceBars } from './FancyResourceBars';
+import { HorizontalResourceBars } from './HorizontalResourceBars';
 import { VanillaBreathMeter } from './BreathMeter';
 import { MonolithFilters, emptyMonolithScene, visualScanRect, scanMonolithScene, type MonolithSceneState } from './MonolithFilters';
 import { GLScreenFilters, TOWER_FILTER_PRESETS, towerFilterDrive, type ScreenFxPass } from './GLScreenFilters';
@@ -186,7 +187,7 @@ import { colorOfTheSkies, setFrameHorizon, setFrameCloudDim, setFrameLightning, 
 import { raiseShimmerLiquidLightFloor, restoreShimmerLiquidLightFloor, type ShimmerFloorLedger } from '../lighting/TileLightScanner';
 import { showJourneyQuickGate } from '../ui/QuickGate';
 import { SMART_CURSOR_DIRECTION_LOCKS, sheetOf } from '../player/SmartCursor';
-import { mobileUiScale, hudTier } from '../ui/MobileControls';
+import { mobileUiScale, hudTier, mobileHudReserveRight } from '../ui/MobileControls';
 import { TEAM_COLORS } from '../stats/Pvp';
 
 /** 鼠标目标格（智能光标激活时 smart=true 并附方向锁 arrow） */
@@ -5256,6 +5257,9 @@ export class Renderer {
   private _fancyBars: FancyResourceBars | null = null;
   get resourceBars(): VanillaResourceBars { return this._resourceBars ?? (this._resourceBars = new VanillaResourceBars()); }
   get fancyBars(): FancyResourceBars { return this._fancyBars ?? (this._fancyBars = new FancyResourceBars()); }
+  private _hBars: HorizontalResourceBars | null = null;
+  /** Fork: waagerechte Leisten (Mobil-App-Stil) */
+  get horizontalBars(): HorizontalResourceBars { return this._hBars ?? (this._hBars = new HorizontalResourceBars()); }
   /** 原版呼吸计（DrawInterface_Resources_Breath 移植：玩家头顶 10 气泡/火焰条） */
   breathMeter = new VanillaBreathMeter();
   /** 背包是否打开（Main.playerInventory 语义——Game.render 经 __swUI 注入） */
@@ -8186,15 +8190,17 @@ export class Renderer {
     //     移动端整体缩小（右锚缩放——两样式均以 viewW 右缘锚定；桌面恒等）
     {
       const barsUiS = mobileUiScale();
-      if (barsUiS !== 1) {
+      const barsShift = mobileHudReserveRight();   // Fork: Platz für Chat/Minikarte/Karte-Knöpfe
+      if (barsUiS !== 1 || barsShift) {
         ctx.save();
-        ctx.translate(viewW, 0);
+        ctx.translate(viewW - barsShift, 0);
         ctx.scale(barsUiS, barsUiS);
         ctx.translate(-viewW, 0);
       }
       if (options.data.resourceBarStyle === 'classic') this.resourceBars.draw(ctx, player, viewW, flicker);
+      else if (options.data.resourceBarStyle === 'bars') this.horizontalBars.draw(ctx, player, viewW, flicker);
       else this.fancyBars.draw(ctx, player, viewW, flicker);
-      if (barsUiS !== 1) ctx.restore();
+      if (barsUiS !== 1 || barsShift) ctx.restore();
     }
     // 11b. 呼吸计（原版 DrawInterface_Resources_Breath Main.cs:42824：玩家头顶
     //      100px 屏幕 10 气泡；岩浆宽限耗损时换火焰条）

@@ -8,6 +8,7 @@
 // ★判例：msg5 槽位条数=数组真实长度非枚举分配量（bank 枚举 200/实体 40）。
 // ★判例：129 门 = 收 49 InitialSpawn 后必须回 12 PlayerSpawn（MessageBuffer.cs:925-943
 //   服务器 msg12 处理器见 State==3 才置 10+129+greet）。
+import { defaultPlayerName } from '../../core/defaultPlayerName';
 import { World } from '../../world/World';
 import { TileStore } from '../../world/TileStore';
 import type { ClientNet, RemotePlayerState, NpcSnap, ProjSnap, ItemOpMsg } from '../ClientNet';
@@ -1069,7 +1070,7 @@ export class VanillaClient {
         loadouts?: Array<{ armor?: DiskItem[]; dye?: DiskItem[] } | undefined> | null;
       } | null;
     }).pendingJoinItems;
-    const name = gp?.appearance?.name ?? pendingName ?? '玩家';
+    const name = gp?.appearance?.name ?? pendingName ?? defaultPlayerName();
     const life = pendingItems?.hp ?? pendingItems?.baseMaxHp ?? gp?.statLifeMax ?? 100;
     const lifeMax = pendingItems?.baseMaxHp ?? gp?.statLifeMax ?? 100;
     const mana = pendingItems?.mana ?? pendingItems?.baseMaxMana ?? gp?.statManaMax ?? 20;

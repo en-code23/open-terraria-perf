@@ -42,7 +42,7 @@ import type { Particle, DamageNumber, HoverTarget, Renderer } from './Renderer';
 import type { FlickerClock } from '../lighting/SkyColor';
 import type { SpriteAtlas } from '../assets/SpriteAtlas';
 import { options } from '../core/Options';
-import { mobileUiScale } from '../ui/MobileControls';
+import { mobileUiScale, mobileHudReserveRight } from '../ui/MobileControls';
 import { Lang } from '../i18n/Lang';
 import { UISfx } from '../vui/UISfx';
 import { CANVAS_MOUSETEXT_FONT, PIXEL_FONT_FAMILY } from '../vui/draw/PixelText';
@@ -1110,15 +1110,17 @@ export class CaptureInterface {
    *  （与 Renderer.render 第 11 段同式——相机模式截断层后的原版重画位） */
   private drawGuiBars(r: Renderer, ctx: CanvasRenderingContext2D, b: RenderBundle, env: CaptureEnv): void {
     const barsUiS = mobileUiScale();
-    if (barsUiS !== 1) {
+    const barsShift = mobileHudReserveRight();
+    if (barsUiS !== 1 || barsShift) {
       ctx.save();
-      ctx.translate(env.viewW, 0);
+      ctx.translate(env.viewW - barsShift, 0);
       ctx.scale(barsUiS, barsUiS);
       ctx.translate(-env.viewW, 0);
     }
     if (options.data.resourceBarStyle === 'classic') r.resourceBars.draw(ctx, b.player, env.viewW, b.flicker);
+    else if (options.data.resourceBarStyle === 'bars') r.horizontalBars.draw(ctx, b.player, env.viewW, b.flicker);
     else r.fancyBars.draw(ctx, b.player, env.viewW, b.flicker);
-    if (barsUiS !== 1) ctx.restore();
+    if (barsUiS !== 1 || barsShift) ctx.restore();
     r.breathMeter.draw(ctx, b.player, b.cam, env.viewH, r.atlas, r.playerInventory);
   }
 

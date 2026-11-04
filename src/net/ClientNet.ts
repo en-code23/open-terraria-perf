@@ -2,6 +2,7 @@
 // 握手 → 世界流式组装 → 玩家互见 + tile 操作上报/应用 + 时间对齐。
 // v6 已同步：NPC(msg23 短码)/弹幕(msg27 kind0-8+hostile)/掉落(msg21)/箱子(msg31/32)。
 // 客户端本地：液体模拟（原版 v1 既定边界）、傀儡插值（快照驱动）。
+import { defaultPlayerName } from '../core/defaultPlayerName';
 import {
   PROTO_MAGIC, PROTO_VER, Msg, NetModule,
   NetWriter, NetReader, FrameParser, TileOp, TileOpAction, readTileBatch, decodeStrip,
@@ -368,7 +369,7 @@ export class ClientNet {
       // mainFlow onJoinRoom 注入——加入公告显示真名而非"玩家"）
       const p = this.game.player as { appearance?: { name?: string } } | undefined | null;
       const pending = (this.game as unknown as { pendingJoinName?: string }).pendingJoinName;
-      const name = p?.appearance?.name ?? pending ?? '玩家';
+      const name = p?.appearance?.name ?? pending ?? defaultPlayerName();
       // 房主令牌：URL 已带 ?token=（路由层 newClient 注入）——消息内再传一份兜底
       // （非房主/旧路径传空串，服务器 try/catch 读不到即跳过）
       const hello = new NetWriter(Msg.Hello).str(PROTO_MAGIC).u16(PROTO_VER).str(name).str(this.hostToken);

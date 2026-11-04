@@ -21,6 +21,7 @@ export function mountInstallPrompt(): void {
   const standalone = window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as unknown as { standalone?: boolean }).standalone === true;
   if (standalone) return;   // 已安装运行中
+  if ((window as unknown as { __otNative?: unknown }).__otNative) return;   // Fork: läuft in der iPhone/iPad-App
 
   const cooldownDismissed = (): boolean => {
     try {

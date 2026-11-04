@@ -1,4 +1,5 @@
 // 游戏主控制器：状态、主循环、挖掘/放置/战斗/生成/存档的总装
+import { defaultPlayerName } from './defaultPlayerName';
 import { FORK_DEV_KEYS } from './forkDev';
 import { directorCamTarget, directorInputLocked, directorMoveInput } from '../mods/director';
 import { Achievements } from './Achievements';
@@ -7816,7 +7817,7 @@ export class Game implements GameHooks {
     bindBossDamageHost({
       npcName: (t) => Lang.npcName(t) ?? `NPC ${t}`,
       ownerName: (slot) => slot < 0
-        ? ((this.player as { appearance?: { name?: string } }).appearance?.name ?? '玩家')
+        ? ((this.player as { appearance?: { name?: string } }).appearance?.name ?? defaultPlayerName())
         : (this.net?.players.get(slot)?.name ?? ''),
     });
     bossDamageSink.add = bossDamageAddDamage;
@@ -55137,7 +55138,7 @@ private static readonly BOULDER_SUPPORT_SHEETS = BOULDERS_SHEETS;
     }
     if (!net?.active) {
       // 单机（netMode==0）：Say 本地回显（同联机房间频道回显格式/难度色）
-      const nameSp = (this.player as { appearance?: { name?: string } }).appearance?.name ?? '玩家';
+      const nameSp = (this.player as { appearance?: { name?: string } }).appearance?.name ?? defaultPlayerName();
       const rgbSp = chatColorOfDifficulty((this.player as { appearance?: { difficulty?: number } }).appearance?.difficulty);
       this.cb.onChat?.(`<${nameSp}> ${text}`, rgbSp[0], rgbSp[1], rgbSp[2]);
       return;
@@ -55147,7 +55148,7 @@ private static readonly BOULDER_SUPPORT_SHEETS = BOULDERS_SHEETS;
       return;
     }
     net.sendChat(text, false);
-    const name = (this.player as { appearance?: { name?: string } }).appearance?.name ?? '玩家';
+    const name = (this.player as { appearance?: { name?: string } }).appearance?.name ?? defaultPlayerName();
     // Say 色度 = Player.ChatColor 难度色（与服务器中继其他端的着色一致）
     const rgb = chatColorOfDifficulty((this.player as { appearance?: { difficulty?: number } }).appearance?.difficulty);
     this.cb.onChat?.(`<${name}> ${text}`, rgb[0], rgb[1], rgb[2]);
@@ -55157,7 +55158,7 @@ private static readonly BOULDER_SUPPORT_SHEETS = BOULDERS_SHEETS;
    *  纯中继模型,结果单源广播防 RNG 漂移,见 src/chat/ChatCommands.ts 头注） */
   private executeChatCommand(msg: OutgoingChatMessage): void {
     const net = this.net;
-    const name = (this.player as { appearance?: { name?: string } }).appearance?.name ?? '玩家';
+    const name = (this.player as { appearance?: { name?: string } }).appearance?.name ?? defaultPlayerName();
     // 活跃名单（Main.player[0..255] active 的槽位序等价:本地 + 远端按 slot 排序）
     const roster: Array<{ slot: number; name: string; pve: number; pvp: number }> = [];
     const mySlot = net?.mySlot ?? 0;

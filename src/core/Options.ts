@@ -1,5 +1,9 @@
 // 设置项单例 + KvStore 持久化（M6）。变更通过监听器下发到 Audio/Sfx/UIScale。
 import { kvGet, kvSet } from '../save/KvStore';
+/** Fork: Touch-Gerät? (ohne Import aus core/input — vermeidet Zyklen) */
+function forkIsTouch(): boolean {
+  try { return typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches; } catch { return false; }
+}
 import { DEFAULT_LANG, detectBrowserLang, normalizeLang } from '../i18n/GameCulture';
 import { sanitizeKeybinds, migrateLegacyDefaults, type KeybindAction } from './Keybinds';
 
@@ -49,7 +53,7 @@ export interface OptionsData {
   gameZoom: number;
   backgrounds: boolean;                // Main.BackgroundEnabled（Main.cs:790，config.json 持久化；默认 true）
   swayInWind: boolean;                 // Main.SettingsEnabled_TilesSwayInWind（图块在风中摆动；默认 true）
-  resourceBarStyle: 'classic' | 'fancy'; // 资源条样式（PlayerResourceSetsManager2：'New' Fancy 金框为原版 1.4.4+ 默认 / 'Default' Classic 朴素）
+  resourceBarStyle: 'classic' | 'fancy' | 'bars'; // 资源条样式（PlayerResourceSetsManager2：'New' Fancy 金框为原版 1.4.4+ 默认 / 'Default' Classic 朴素）
   /** 标题曲风格（★IIIII228 Main.titleMusicStyle,config.json "TitleMusic" 字符串键
    *  Main.cs:4602 默认 Current；Random 每次启动 new UnifiedRandom(DateTime.Ticks).Next(3)
    *  抽档 :4605-4608）。值域 = Current/Old/Console/Random */
@@ -320,6 +324,8 @@ export interface OptionsData {
   mapXray: boolean;
   /** Fork: einmalige Umstellung auf den klassischen NPC-Dialog ohne Porträt erledigt */
   forkClassicDialog?: boolean;
+  /** Fork: Touch-Geräte einmalig auf waagerechte Leisten (wie die Mobil-App) */
+  forkMobileBars?: boolean;
   /** ★后台继续运行（2026-09-28 用户需求:后台挂机——切后台 rAF 停发=世界冻结的
    *  Web 缺口;原版无对应物=Web 便利档,缺省开）。消费=Game.onPumpMsg 泵门四条件
    *  之一（document.hidden ∧ 本开关 ∧ playWhenUnfocused ∧ !paused → fixedUpdate
@@ -625,6 +631,11 @@ export class OptionsStore {
       if (typeof this.data.mapXray !== 'boolean') this.data.mapXray = true;
       // Fork: bestehende Einstellungen einmalig auf den klassischen Dialog umstellen
       if (this.data.forkClassicDialog !== true) { this.data.dialoguePortraitMode = 'disabled'; this.data.forkClassicDialog = true; }
+      if (!['classic', 'fancy', 'bars'].includes(this.data.resourceBarStyle)) this.data.resourceBarStyle = 'fancy';
+      if (this.data.forkMobileBars !== true) {
+        this.data.forkMobileBars = true;
+        if (forkIsTouch()) this.data.resourceBarStyle = 'bars';
+      }
       // ★后台继续运行（2026-09-28）：坏值回缺省「开」（布尔卫门同族）
       if (typeof this.data.backgroundRun !== 'boolean') this.data.backgroundRun = true;
       this.persistedLayout = this.data.inventoryLayout;

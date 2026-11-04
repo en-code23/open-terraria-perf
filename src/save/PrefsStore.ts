@@ -39,6 +39,8 @@
 import { kvDeleteIdb, kvSetIdb, kvSweepIdb } from './KvStore';
 
 const EXACT_KEYS: ReadonlySet<string> = new Set([
+  'ot.recentServers',   // Fork: zuletzt verbundene Server
+  'ot.lanHelper',       // Fork: iPhone-App — IP des Macs mit dem LAN-Helfer
   'sbw.achievements.v1',
   'sbw.lastCharId',
   'sbw.itemSearchConfirmed',

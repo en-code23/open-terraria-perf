@@ -469,7 +469,18 @@ function openInGamePause(game: Game): void {
   if (FORK_VANILLA_INGAME_OPTIONS && flow) {
     const panel = flow.openSettings(true, {
       onBack: () => { if (pausePanel) finishInGamePause(game); },
-      extraActions: [{
+      extraActions: [...(!game.net?.active ? [{
+        // Fork: „Für LAN öffnen“ (echter Terraria-Server über den LAN-Helfer)
+        label: (Lang.activeCultureName ?? '').startsWith('de') ? 'Für LAN öffnen' : 'Open to LAN',
+        onClick: () => {
+          const p = pausePanel;
+          pausePanel = null;
+          p?.querySelector<HTMLElement>('.sw-set-footer .sw-set-back')?.click();
+          game.input.uiBlocking = pauseSavedBlocking;
+          game.paused = false;
+          void flow?.openToLan();
+        },
+      }] : []), {
         label: Lang.text('LegacyInterface.35'),
         onClick: () => {
           const p = pausePanel;

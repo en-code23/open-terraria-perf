@@ -4,7 +4,7 @@
 //
 // Läuft auf dem Rechner, auf dem Terraria (Steam) installiert ist, und bietet:
 //   1) Brücke Browser ⇄ Terraria-Server: WebSocket  ws://<rechner>:5290/?host=H&port=P
-//      → TCP H:P (nur Loopback/privates Netz). Browser können kein rohes TCP.
+//      → TCP H:P (eigenes Netz oder Internet-Server per IP/Domain). Browser können kein rohes TCP.
 //   2) HTTP-API (für das Mehrspieler-Menü im Spiel):
 //        GET  /api/status            Terraria gefunden?, laufende Server, Welten
 //        POST /api/host              {file?|create:{name,size,difficulty}} → Server starten
@@ -17,6 +17,7 @@
 // Nur fürs eigene Netz gedacht. Keine Abhängigkeiten (WebSocket von Hand, RFC 6455).
 import http from 'node:http';
 import net from 'node:net';
+import dns from 'node:dns/promises';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -258,12 +259,35 @@ const server = http.createServer(async (req, res) => {
 /** Ziel erlaubt? Private IP-Literale im eigenen Netz (andere Terraria-Server) mit Port ≥ 1024;
  *  Loopback (dieser Rechner) nur zu den hier gestarteten Terraria-Servern oder, wenn die
  *  Anfrage selbst von diesem Rechner kommt — sonst wäre die Brücke ein Tor zu lokalen Diensten. */
+/** Öffentliche Unicast-Adresse (Internet-Server, z. B. TShock/beardedio)? Keine
+ *  Sonder-/Multicast-/Broadcast-Bereiche. */
+function isPublicIp(a) {
+  const v = net.isIP(a);
+  if (v === 4) {
+    const [x, y] = a.split('.').map(Number);
+    if (x === 0 || x >= 224 || (x === 100 && y >= 64 && y <= 127) || (x === 192 && y === 0)) return false;
+    return true;
+  }
+  if (v === 6) return /^[23][0-9a-f]{3}:/i.test(a);   // 2000::/3 globaler Unicast
+  return false;
+}
+/** host = bereits aufgelöste IP. Eigenes Netz immer; Loopback nur für selbst gestartete
+ *  Server oder Anfragen von diesem Rechner; Internet-Server (öffentliche IP) erlaubt —
+ *  die Brücke selbst nimmt nur Seiten aus dem eigenen Netz an (originOk). */
 function targetOk(req, host, port) {
   if (!(Number.isInteger(port) && port >= 1024 && port < 65536) || port === PORT) return false;
   const k = addrKind(host);
   if (k === 'private') return true;
   if (k === 'loopback') return servers.has(port) || fromLoopback(req);
-  return false;
+  return isPublicIp(String(host).replace(/^\[|\]$/g, ''));
+}
+/** Hostname → IP (Server per Domain, z. B. „terraria.example.org“) */
+async function resolveHost(h) {
+  const a = String(h ?? '').replace(/^\[|\]$/g, '');
+  if (a === 'localhost') return '127.0.0.1';
+  if (net.isIP(a)) return a;
+  if (!/^[a-z0-9.-]{1,253}$/i.test(a)) return null;
+  try { return (await dns.lookup(a)).address; } catch { return null; }
 }
 const MAX_WS_MSG = 4 * 1024 * 1024;   // Terraria-Pakete sind viel kleiner
 
@@ -275,12 +299,14 @@ function wsFrame(payload, opcode = 2) {
   return Buffer.concat([head, payload]);
 }
 
-server.on('upgrade', (req, sock) => {
+server.on('upgrade', async (req, sock) => {
   const url = new URL(req.url ?? '/', 'http://x');
-  const host = url.searchParams.get('host') ?? '127.0.0.1';
   const port = Number(url.searchParams.get('port') ?? 7777);
   const key = req.headers['sec-websocket-key'];
-  if (!key || !originOk(req) || !targetOk(req, host, port)) { sock.destroy(); return; }
+  if (!key || !originOk(req)) { sock.destroy(); return; }
+  sock.on('error', () => {});
+  const host = await resolveHost(url.searchParams.get('host') ?? '127.0.0.1');
+  if (!host || sock.destroyed || !targetOk(req, host, port)) { sock.destroy(); return; }
   const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
   sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
     + `Sec-WebSocket-Accept: ${accept}\r\n\r\n`);
