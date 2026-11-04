@@ -1,5 +1,6 @@
 // 菜单/游戏流程编排（VUI 版）：主菜单 → 世界生成/读取 → 进游戏 → 退出回菜单。
 // main.ts 只做启动装配；本模块持有 Game 生命周期与 VUI/背景的 rAF 驱动。
+import { lowMemoryMode } from './core/lowMemory';
 import { maybeInstallGpuLoggerFromUrl } from './render/GLStats';
 import { Game, grantStarterKit } from './core/Game';
 import { WorldGenAbortedError } from './world/gen/WorldGen';   // ★IIIII229 ① Esc 中止判别
@@ -505,6 +506,8 @@ export function createFlow(root: HTMLElement, atlas: SpriteAtlas | null, ui: UI,
       try { game.destroy(); } catch (e) { console.warn('[mainFlow] 旧实例清理异常(忽略):', e); }
     }
     game = g;
+    // Fork: Sparmodus — gemeinsamen Generierungs-/Lade-Worker beenden (eigener Heap)
+    if (lowMemoryMode()) { flowGenClient?.terminate(); flowGenClient = null; }
     // ★BJ280（2026-09-22）：进世界即 dirty——onWorldReady 唯一收口（创建/槽位读档/
     //  快速读档/导入/联机加入五路全覆盖）。无逐帧变更追踪（成本高,登记债）,保守
     //  语义=「进世界后未走保存链即 dirty」,宁多拦不漏拦。

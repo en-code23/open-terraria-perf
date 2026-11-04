@@ -14,6 +14,7 @@ const swTrace = (msg: string): void => {
 // 唯一活面=Player.png 兜底(刀0 已换默认纸娃娃)与 NPC_2/3/4/81 敌怪支(⑤已删)。
 // 本文件自此只承载原版素材命名空间（vanilla/vanilla-ui/图集子矩形/懒加载链）。
 // 原版素材由 scripts/vanilla-atlas.mjs 生成（public/sprites/vanilla.json，独立命名空间、无 Unity y 翻转）
+import { lowMemoryMode } from '../core/lowMemory';
 import vanillaJson from '../../public/sprites/vanilla.json';
 import vanillaNpcsJson from '../../public/sprites/vanilla-npcs.json';
 import vanillaUiJson from '../../public/sprites/vanilla-ui.json';
@@ -642,6 +643,8 @@ export class SpriteAtlas {
    *  ★C16c-F5(2026-10-12) 勘正:旧注 ~4.6MB/144 张系未实测估算——盘上实测预载集
    *  3.167MB(696 键派生 NPC_{id}.png ∪ vanilla.json npcs 20 特殊表),Alt_* 22 张。 */
   preloadMiscAndNpcs(): Promise<void> {
+    // Fork: Sparmodus — NPC-Grafiken (~690 Blätter, mehrere 100 MB entpackt) erst bei Bedarf
+    if (lowMemoryMode()) return this.preloadFiles([...VANILLA_MISC]);
     const files = [
       ...VANILLA_MISC,
       ...Object.values(this.vanilla.npcs ?? {}).map((n) => n.sheet),

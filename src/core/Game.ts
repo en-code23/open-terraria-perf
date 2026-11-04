@@ -1,4 +1,5 @@
 // 游戏主控制器：状态、主循环、挖掘/放置/战斗/生成/存档的总装
+import { lowMemoryMode } from './lowMemory';
 import { defaultPlayerName } from './defaultPlayerName';
 import { FORK_DEV_KEYS } from './forkDev';
 import { directorCamTarget, directorInputLocked, directorMoveInput } from '../mods/director';
@@ -7291,6 +7292,8 @@ export class Game implements GameHooks {
             },
           },
         );
+        // Fork: Sparmodus — Generierungs-Worker (eigener Heap mit Weltkopie) sofort beenden
+        if (lowMemoryMode()) { this.genClient?.terminate(); this.genClient = null; }
         // ★622:mod gen passes=worker 侧 applyGenSrc 注册(generateWorld 内含 mod pass;
         //  主线程 dispatch 撤=worker 路径 handles it natively)
         await this.preloadSceneAssets((label, p) => onProgress?.(label, 0.87 + p * 0.13));
@@ -7739,6 +7742,7 @@ export class Game implements GameHooks {
     // 直引类静态(曾写 this.chunks?.constructor——afterWorldLoad 头部
     // this.chunks 尚未构造,undefined 上赋值即崩)
     ChunkCache.MAX_CHUNKS = Math.max(64, Math.min(ChunkCache.BASE_MAX_CHUNKS, ChunkCache.MAX_CHUNKS * 2));
+    if (lowMemoryMode()) ChunkCache.MAX_CHUNKS = Math.min(ChunkCache.MAX_CHUNKS, 96);   // Fork: Sparmodus
     // 贫困模式(#三开压测批):会话饥饿过 → chunk 页池钳 32(1024² 页=4MB/页,驻留
     // 大头;渲染分辨率降不了它,只有页数能)。钳后重进世界稳定运行,不反复穿池
     if (starvedEver()) {

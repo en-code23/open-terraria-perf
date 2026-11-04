@@ -3,6 +3,7 @@
 // 修复 <audio loop> 播 mp3 的循环点卡顿 + 切曲冷启动顿挫（原版 XACT 同为解码循环）。
 // musicFade[id] ±0.005/帧 逼近目标曲（:295 UpdateCommonTrack / :323 TowardStopping,1458 行号）。
 // audios/music/Music_<id>.mp3（tools/xwb-extract.mjs 提取）。
+import { lowMemoryMode } from './lowMemory';
 import { MUSIC } from '../data/Music';
 import { modMusicSource, menuMusicId } from '../mods/music';   // ★BGM 面:mod 槽位源/菜单曲
 import { Sfx, setMusicOverrideListener, musicPackOverride, applyLoopBounds } from './Sfx';
@@ -268,14 +269,15 @@ export class AudioSystem {
    *  之后 track() 重建才需重解码。pool 只存交叉淡化中的曲目(tickFade 停播即
    *  移出),故候选不足降到上限的情形可忽略 */
   private evictOld(): void {
-    if (this.buffers.size <= AudioSystem.MAX_BUFFERS) return;
+    const max = lowMemoryMode() ? 1 : AudioSystem.MAX_BUFFERS;   // Fork: Sparmodus
+    if (this.buffers.size <= max) return;
     const evictable: number[] = [];
     for (const [id] of this.buffers) {
       if (this.pool.has(id)) continue;   // 播放/淡化中:track() 不可失源
       evictable.push(id);
     }
     for (const id of evictable) {
-      if (this.buffers.size <= AudioSystem.MAX_BUFFERS) break;
+      if (this.buffers.size <= max) break;
       this.buffers.delete(id);
     }
   }
