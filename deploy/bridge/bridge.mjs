@@ -117,28 +117,39 @@ server.on('upgrade', async (req, sock) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const key = req.headers['sec-websocket-key'];
   if (!key || !/^\/bridge\/?$/.test(url.pathname) || !originOk(req) || active >= MAX_CONN) { sock.destroy(); return; }
-  const target = await resolveTarget(url.searchParams.get('host'), Number(url.searchParams.get('port') ?? 7777));
-  if (!target || sock.destroyed) { sock.destroy(); return; }
+  // Platz vor dem await reservieren (sonst überholen parallele Anfragen das Limit)
   active++;
   let counted = true;
   const release = () => { if (counted) { counted = false; active--; } };
+  const target = await resolveTarget(url.searchParams.get('host'), Number(url.searchParams.get('port') ?? 7777));
+  if (!target || sock.destroyed) { release(); sock.destroy(); return; }
   const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
   sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
     + `Sec-WebSocket-Accept: ${accept}\r\n\r\n`);
   sock.setNoDelay(true);
   const tcp = net.connect(target);
   tcp.setNoDelay(true);
+  // bis der Server antwortet: Browser-Daten anhalten statt unbegrenzt puffern; 10 s Verbindungs-Timeout
+  sock.pause();
+  const connectTimer = setTimeout(() => tcp.destroy(new Error('connect timeout')), 10_000);
   const pending = [];
+  let pendingBytes = 0;
   let tcpReady = false;
-  tcp.on('connect', () => { tcpReady = true; for (const b of pending) tcp.write(b); pending.length = 0; });
+  tcp.on('connect', () => {
+    clearTimeout(connectTimer);
+    tcpReady = true; for (const b of pending) tcp.write(b); pending.length = 0; pendingBytes = 0;
+    sock.resume();
+  });
+  // Gegendruck: schreibt der Server-Socket nicht schnell genug, Browser-Seite anhalten
+  tcp.on('drain', () => sock.resume());
   tcp.on('data', (d) => { if (!sock.destroyed) sock.write(wsFrame(d)); });
   const closeBoth = () => {
     release();
     try { if (!sock.destroyed) sock.end(wsFrame(Buffer.alloc(0), 8)); } catch { /* */ }
     tcp.destroy();
   };
-  tcp.on('close', closeBoth);
-  tcp.on('error', closeBoth);
+  tcp.on('close', () => { clearTimeout(connectTimer); closeBoth(); });
+  tcp.on('error', () => { clearTimeout(connectTimer); closeBoth(); });
   let buf = Buffer.alloc(0);
   let frag = [];
   let fragLen = 0;
@@ -165,7 +176,14 @@ server.on('upgrade', async (req, sock) => {
       if (!fin) continue;
       const msg = frag.length === 1 ? frag[0] : Buffer.concat(frag);
       frag = []; fragLen = 0;
-      if (tcpReady) tcp.write(msg); else pending.push(msg);
+      if (tcpReady) {
+        if (!tcp.write(msg)) sock.pause();
+        if (tcp.writableLength > MAX_WS_MSG) { closeBoth(); sock.destroy(); return; }
+      } else {
+        pendingBytes += msg.length;
+        if (pendingBytes > MAX_WS_MSG) { closeBoth(); sock.destroy(); return; }
+        pending.push(msg);
+      }
     }
   });
   sock.on('close', () => { release(); tcp.destroy(); });

@@ -3,6 +3,10 @@
 {$SITE_ADDRESS::80} {
 	encode zstd gzip
 
+	# optionaler Passwortschutz für ALLES (Spiel, Brücke, Konfiguration), AUTH_MODE=basic.
+	# Browser schicken die Anmeldung auch beim WebSocket-Aufbau mit.
+	import /etc/caddy/auth/{$AUTH_MODE:none}.caddy
+
 	# Mehrspieler-Brücke (WebSocket ⇄ TCP) und Server-Konfiguration fürs Spiel
 	@bridge path /bridge /bridge/*
 	handle @bridge {
@@ -12,9 +16,8 @@
 		reverse_proxy bridge:5290
 	}
 
-	# das Spiel (optional mit Passwortschutz, AUTH_MODE=basic)
+	# das Spiel
 	handle {
-		import /etc/caddy/auth/{$AUTH_MODE:none}.caddy
 		root * /srv
 		try_files {path} /index.html
 		header /index.html Cache-Control "no-cache"
