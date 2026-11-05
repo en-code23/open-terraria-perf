@@ -40,7 +40,8 @@ export { hudTier };
  *  0.7 会把 ⌀46 压到违规尺寸(44pt 红线)，操控层由 --mbtn-scale 独立控制 */
 export function mobileUiScale(): number {
   const t = hudTier();
-  if (t === 'd0' || t === 't1') return 1;
+  if (t === 'd0') return 1;
+  if (t === 't1') return 1.3;   // Fork: iPad — Leben/Mana/Minikarte größer
   return t === 't3' ? 0.62 : 0.7;
 }
 

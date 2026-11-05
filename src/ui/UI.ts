@@ -7366,7 +7366,7 @@ export class UI {
     if (hudTier() === 't3') return { cols: 5, q: 0.78 };   // 竖屏两行五列,视觉≈41px 格
     // Fork: Touch quer (Handy/iPad) wie die Mobil-App: zwei Spalten senkrecht links
     if (hudTier() === 't2') return { cols: 2, q: 0.66 };
-    if (hudTier() === 't1') return { cols: 2, q: 0.84 };
+    if (hudTier() === 't1') return { cols: 2, q: 1.1 };    // Fork: iPad — größere Hotbar
     return null;
   }
 
